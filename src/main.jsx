@@ -1,97 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as THREE from 'three';
+import { createFlightPhysics } from './flightPhysics.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { Brain, CheckCircle2, CloudRain, Crosshair, Eye, EyeOff, Gauge, Info, Plane, Rewind, RotateCcw, Scale, Sparkles, Sun, Wind } from 'lucide-react';
+import { Brain, CheckCircle2, CloudRain, Crosshair, Eye, EyeOff, Gauge, Info, Pause, Play, Plane, Rewind, RotateCcw, Scale, Sparkles, StepForward, Sun, Wind } from 'lucide-react';
 import './styles.css';
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const WORLD_X_SCALE = 1.25;
 const WORLD_Y_SCALE = 1.1;
 const WORLD_Z_SCALE = 1.35;
-
+const DEFAULT_WING_AREA = 0.03;
+const WING_AREA_OPTIONS = [
+  { value: 0.024, label: '小型', area: '0.024 m²' },
+  { value: DEFAULT_WING_AREA, label: '中型', area: '0.030 m²' },
+  { value: 0.036, label: '大型', area: '0.036 m²' }
+];
 const clipMultiplier = placement => placement === 'both' ? 2 : 1;
-const lateralSign = placement => placement === 'left' ? 1 : placement === 'right' ? -1 : 0;
-
-function simulateFlight(settings) {
-  const { clipCount, clipPosition, clipPlacement, throwAngle, throwPower, wind, windDirection, weather, goal } = settings;
-  const effectiveClipCount = clipCount * clipMultiplier(clipPlacement);
-  const sideWeight = lateralSign(clipPlacement);
-  const crosswindSign = windDirection === 'left' ? 1 : windDirection === 'right' ? -1 : 0;
-  const longitudinalWind = windDirection === 'front' ? wind : 0;
-  const crosswind = crosswindSign * Math.abs(wind);
-  const mass = 0.005 + effectiveClipCount * 0.00045;
-  const targetCg = 30;
-  const cg = effectiveClipCount === 0 ? 37 : 37 - effectiveClipCount * (45 - clipPosition) * 0.11;
-  const stability = clamp(1 - Math.abs(cg - targetCg) / 24, 0.35, 1);
-  const noseHeavy = clamp((30 - cg) / 13, -0.75, 0.75);
-  const speed0 = 5.8 + throwPower * 0.12;
-  const angle = THREE.MathUtils.degToRad(throwAngle);
-  let x = 0;
-  let y = 1.35;
-  let z = 0;
-  let vx = speed0 * Math.cos(angle);
-  let vy = speed0 * Math.sin(angle);
-  let vz = 0;
-  let t = 0;
-  let peak = y;
-  const maxBank = sideWeight * clamp(0.14 + clipCount * 0.065, 0, 0.38);
-  const points = [{ x, y, z, t, roll: 0, lift: 0, drag: 0, speed: speed0, turbulence: 0 }];
-
-  while (y > 0 && t < 12) {
-    const dt = 0.04;
-    const relativeV = Math.max(0.2, vx - longitudinalWind * 0.25);
-    const speedRatio = relativeV / speed0;
-    const massFactor = clamp(0.00545 / mass, 0.82, 1.08);
-    const lift = 8.65 * speedRatio * speedRatio * stability * massFactor;
-    const drag = 0.025 * relativeV * relativeV * (1 + (1 - stability) * 1.6);
-    const goalLift = goal === 'high' ? 1.04 : 1;
-    const gustWave = weather === 'typhoon'
-      ? Math.sin(t * 5.1 + 0.7) * 0.56 + Math.sin(t * 11.7 + 1.9) * 0.3 + Math.sin(t * 2.3) * 0.22
-      : 0;
-    const turbulence = weather === 'typhoon' ? gustWave * (0.7 + Math.abs(wind) * 0.075) : 0;
-    const roll = maxBank * (1 - Math.exp(-t * 2.4))
-      + sideWeight * Math.sin(t * 7) * 0.018
-      + crosswind * 0.012 * (1 - Math.exp(-t * 1.8))
-      + turbulence * 0.085;
-    vx += ((longitudinalWind * 0.3) - drag + turbulence * 0.12) * dt;
-    vy += (lift * goalLift - 9.81 - noseHeavy * 2.5 - vy * 0.12 + turbulence * 1.25) * dt;
-    vz += (Math.sin(roll) * lift * 1.8 + crosswind * 0.46 + turbulence * 2.2 - vz * 0.38) * dt;
-    x += Math.max(0, vx) * dt;
-    y += vy * dt;
-    z += vz * dt;
-    t += dt;
-    peak = Math.max(peak, y);
-    points.push({ x, y: Math.max(0, y), z, t, roll, lift, drag, speed: Math.max(0, vx), turbulence });
-  }
-
-  const distance = points.at(-1).x;
-  const airtime = points.at(-1).t;
-  const deviation = points.at(-1).z;
-  let verdict = '配重接近穩定區，適合進行真實試飛。';
-  if (clipCount === 0) verdict = '目前沒有配重，機頭可能抬起後失速。';
-  else if (sideWeight !== 0) verdict = `${clipPlacement === 'left' ? '左翼' : '右翼'}較重，飛機會向同側傾斜並偏移約 ${Math.abs(deviation).toFixed(1)} 公尺。`;
-  else if (cg < 23) verdict = '機頭偏重，飛機可能很快向下俯衝。';
-  else if (cg > 36) verdict = '重心偏後，飛機可能抬頭並左右搖晃。';
-  else if (crosswindSign !== 0 && Math.abs(wind) > 2) verdict = `${windDirection === 'left' ? '左側風' : '右側風'}讓落點側偏約 ${Math.abs(deviation).toFixed(1)} 公尺。`;
-  else if (weather === 'typhoon') verdict = '颱風亂流使高度與方向持續改變，落點最難預測。';
-  else if (longitudinalWind > 3) verdict = '順風很強，軌跡會變遠，但真實飛行也更難控制。';
-  else if (longitudinalWind < -3) verdict = '逆風很強，飛機前進速度下降，但可能增加滯空時間。';
-
-  const peakIndex = points.reduce((best, point, index) => point.y > points[best].y ? index : best, 0);
-  const events = [{ progress: peakIndex / Math.max(1, points.length - 1), label: '到達最高點', detail: `${peak.toFixed(1)} 公尺`, tone: 'peak' }];
-  if (weather === 'typhoon') {
-    const gustIndex = points.reduce((best, point, index) => Math.abs(point.turbulence) > Math.abs(points[best].turbulence) ? index : best, 0);
-    events.push({ progress: gustIndex / Math.max(1, points.length - 1), label: '強烈亂流', detail: '高度與姿態突然改變', tone: 'danger' });
-  }
-  if (crosswindSign !== 0 && Math.abs(wind) > 1) {
-    events.push({ progress: 0.58, label: '側風推動', detail: `飛機向${crosswindSign > 0 ? '左' : '右'}側偏移`, tone: 'wind' });
-  }
-  if (stability < 0.72) events.push({ progress: 0.38, label: '重心不穩', detail: '機身開始明顯搖擺', tone: 'warning' });
-  events.sort((a, b) => a.progress - b.progress);
-
-  return { points, distance, peak, airtime, deviation, cg, stability, verdict, events };
-}
 
 function getCg(settings) {
   if (settings.clipCount === 0) return 37;
@@ -114,7 +39,8 @@ function makePlane() {
     const mesh = new THREE.Mesh(geo, paper);
     return mesh;
   };
-  group.add(makeWing(1), makeWing(-1));
+  const wingGroup = new THREE.Group();
+  wingGroup.add(makeWing(1), makeWing(-1));
 
   const keelGeo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(-4.5, 0, 0), new THREE.Vector3(5.35, 0, 0), new THREE.Vector3(-2.2, 0, -0.55), new THREE.Vector3(-4.5, 0, 0)
@@ -127,12 +53,14 @@ function makePlane() {
     const crease = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-3.9, side * 1.15, 0.02), new THREE.Vector3(4.95, side * 0.45, 0.02)
     ]);
-    group.add(new THREE.Line(crease, fold));
+    wingGroup.add(new THREE.Line(crease, fold));
   });
+  group.add(wingGroup);
   group.rotation.x = -Math.PI / 2;
   const carrier = new THREE.Group();
   carrier.add(group);
   carrier.userData.paperModel = group;
+  carrier.userData.wingGroup = wingGroup;
   return carrier;
 }
 
@@ -464,7 +392,7 @@ function makeEnvironment() {
   return environment;
 }
 
-function FlightScene({ settings, flightRequest, replayResult, onResult, onFlightState, onFlightEvent, showForces, cameraMode }) {
+function FlightScene({ settings, flightRequest, replayResult, onResult, onFlightState, onFlightEvent, onTelemetry, showForces, cameraMode, flightPaused, onPauseChange, stepRequest }) {
   const host = useRef(null);
   const sceneRef = useRef(null);
   const cameraModeRef = useRef(cameraMode);
@@ -524,6 +452,7 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
 
     const clips = new THREE.Group();
     plane.userData.paperModel.add(clips);
+    const wingFlexGroups = { left: plane.userData.wingGroup.children[0], right: plane.userData.wingGroup.children[1] };
 
     const pathMaterial = new THREE.LineBasicMaterial({ color: '#e24e36', transparent: true, opacity: 0 });
     const pathLine = new THREE.Line(new THREE.BufferGeometry(), pathMaterial);
@@ -537,7 +466,8 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
       lift: new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 1, '#2185d0', 0.28, 0.15),
       weight: new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(), 1, '#e44f39', 0.28, 0.15),
       thrust: new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 1, '#15966b', 0.28, 0.15),
-      drag: new THREE.ArrowHelper(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(), 1, '#d49a23', 0.28, 0.15)
+      drag: new THREE.ArrowHelper(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(), 1, '#d49a23', 0.28, 0.15),
+      wind: new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 1, '#35a7c5', 0.28, 0.15)
     };
     Object.values(forceArrows).forEach(arrow => forceGroup.add(arrow));
     forceGroup.visible = false;
@@ -550,7 +480,8 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
       scene, camera, renderer, controls, plane, clips, pathLine, pathMaterial,
       previousPathLine, previousPathMaterial, forceGroup, forceArrows,
       windStreaks, rainStreaks, windSpeed: 0, windDirection: 'front', weather: 'clear',
-      hemisphere, sun, ground, trees,
+      hemisphere, sun, ground, trees, wingFlexGroups, flightSimulation: null,
+      paused: false, stepRequestId: 0,
       cameraGoal: camera.position.clone(), targetGoal: controls.target.clone(),
       isFlying: false, raf: 0, flightRaf: 0
     };
@@ -629,6 +560,12 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
   }, [showForces, flightRequest.id]);
 
   useEffect(() => {
+    if (!sceneRef.current) return;
+    const scale = Math.sqrt((settings.wingArea ?? DEFAULT_WING_AREA) / DEFAULT_WING_AREA);
+    sceneRef.current.plane.userData.wingGroup.scale.setScalar(scale);
+  }, [settings.wingArea]);
+
+  useEffect(() => {
     if (sceneRef.current) {
       sceneRef.current.windSpeed = settings.wind;
       sceneRef.current.windDirection = settings.windDirection;
@@ -678,16 +615,47 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
   }, [settings.clipCount, settings.clipPosition, settings.clipPlacement]);
 
   useEffect(() => {
+    if (sceneRef.current) sceneRef.current.paused = flightPaused;
+  }, [flightPaused]);
+
+  useEffect(() => {
+    const state = sceneRef.current;
+    if (!state || state.stepRequestId === stepRequest.id) return;
+    state.stepRequestId = stepRequest.id;
+    if (!state.paused || !state.flightSimulation || state.flightSimulation.done) return;
+    state.flightSimulation.step(1 / 30);
+    renderFlightPoint(state, state.flightSimulation.latestPoint, onTelemetry);
+    updateTrail(state, state.flightSimulation.latestPoint);
+    while (state.lastSeenEventIndex < state.flightSimulation.events.length) {
+      onFlightEvent(state.flightSimulation.events[state.lastSeenEventIndex]);
+      state.lastSeenEventIndex += 1;
+    }
+    if (state.flightSimulation.done) {
+      const result = state.flightSimulation.finish();
+      state.lastResult = result;
+      state.isFlying = false;
+      state.flightSimulation = null;
+      state.forceGroup.visible = false;
+      state.controls.enabled = cameraModeRef.current === 'overview';
+      onResult(result);
+      onFlightState(false);
+      onPauseChange(false);
+      onFlightEvent({ label: result.cause, detail: result.verdict, tone: result.cause === '穩定飛行' ? 'peak' : 'danger' });
+    }
+  }, [stepRequest.id]);
+
+  useEffect(() => {
     if (!sceneRef.current || flightRequest.id === 0) return;
     const isReplay = flightRequest.mode === 'replay' && Boolean(replayResult);
-    const result = isReplay ? replayResult : simulateFlight(settings);
+    const result = isReplay ? replayResult : null;
     onFlightState(true);
+    onPauseChange(false);
     onFlightEvent(isReplay ? { label: '慢動作重播', detail: '觀察姿態與路徑變化', tone: 'replay' } : null);
-    const {
-      plane, pathLine, pathMaterial, previousPathLine, previousPathMaterial,
-      forceGroup, forceArrows, controls, cameraGoal, targetGoal
-    } = sceneRef.current;
-    cancelAnimationFrame(sceneRef.current.flightRaf);
+    const state = sceneRef.current;
+    const { plane, pathLine, pathMaterial, previousPathLine, previousPathMaterial,
+      forceGroup, controls, cameraGoal, targetGoal } = state;
+    state.controls = controls;
+    cancelAnimationFrame(state.flightRaf);
     if (!isReplay && pathLine.geometry.getAttribute('position')) {
       previousPathLine.geometry.dispose();
       previousPathLine.geometry = pathLine.geometry.clone();
@@ -695,101 +663,175 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
       previousPathLine.computeLineDistances();
       previousPathMaterial.opacity = pathMaterial.opacity > 0 ? 0.58 : 0;
     }
-    const coords = result.points.map(p => new THREE.Vector3(p.x * WORLD_X_SCALE, p.y * WORLD_Y_SCALE, p.z * WORLD_Z_SCALE));
-    const flightCurve = new THREE.CatmullRomCurve3(coords, false, 'centripetal', 0.35);
-    const trailPoints = flightCurve.getPoints(Math.max(140, coords.length * 2));
     pathLine.geometry.dispose();
-    pathLine.geometry = new THREE.BufferGeometry().setFromPoints(trailPoints);
+    pathLine.geometry = new THREE.BufferGeometry();
+    pathLine.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(1600 * 3), 3));
     pathLine.geometry.setDrawRange(0, 1);
     pathMaterial.opacity = 0.8;
     forceGroup.visible = showForces;
-    sceneRef.current.isFlying = true;
+    state.isFlying = true;
+    state.paused = false;
     controls.enabled = false;
-    const paperModel = plane.userData.paperModel;
-    const duration = clamp(result.airtime * 1050, 1900, 4400) * (isReplay ? 1.85 : 1);
-    const landingDuration = isReplay ? 820 : 520;
-    const endPoint = flightCurve.getPoint(1);
-    const sceneDistance = result.distance * WORLD_X_SCALE;
-    const scenePeak = result.peak * WORLD_Y_SCALE;
-    const midpoint = sceneDistance * 0.5;
-    const startTime = performance.now();
-    let eventIndex = 0;
-
-    const step = now => {
-      const elapsed = now - startTime;
-      const progress = clamp(elapsed / duration, 0, 1);
-      const point = flightCurve.getPoint(progress);
-      const tangent = flightCurve.getTangent(Math.min(0.999, progress + 0.002));
-      const sourceIndex = Math.min(result.points.length - 1, Math.floor(progress * (result.points.length - 1)));
-      const p = result.points[sourceIndex];
-      if (isReplay && eventIndex < result.events.length && progress >= result.events[eventIndex].progress) {
-        onFlightEvent(result.events[eventIndex]);
-        eventIndex += 1;
-      }
-      plane.position.copy(point);
-      const targetPitch = Math.atan2(tangent.y, tangent.x);
-      const targetYaw = -Math.atan2(tangent.z, tangent.x);
-      plane.rotation.z = THREE.MathUtils.lerp(plane.rotation.z, targetPitch, 0.14);
-      plane.rotation.y = THREE.MathUtils.lerp(plane.rotation.y, targetYaw, 0.12);
-      const motionFade = Math.sin(progress * Math.PI);
-      const rollStrength = clamp((1 - result.stability) * 0.075 + Math.abs(settings.wind) * 0.006, 0.004, 0.075);
-      const naturalMotion = Math.sin(progress * Math.PI * 3) * rollStrength * motionFade;
-      const stormShake = settings.weather === 'typhoon' ? (p.turbulence || 0) * 0.035 * motionFade : 0;
-      const roll = (p.roll || 0) + naturalMotion + stormShake;
-      paperModel.rotation.x = -Math.PI / 2 + roll;
-      pathLine.geometry.setDrawRange(0, Math.max(2, Math.ceil(progress * trailPoints.length)));
-      forceGroup.position.copy(plane.position);
-      forceArrows.lift.setLength(clamp((p.lift || 0) * 0.16, 0.35, 2.2), 0.28, 0.15);
-      forceArrows.weight.setLength(1.55, 0.28, 0.15);
-      forceArrows.thrust.setLength(clamp((p.speed || 0) * 0.12, 0.35, 1.9), 0.28, 0.15);
-      forceArrows.drag.setLength(clamp((p.drag || 0) * 0.28, 0.3, 1.7), 0.28, 0.15);
-
-      if (cameraModeRef.current === 'follow') {
-        cameraGoal.set(point.x - 5.2, point.y + 3.1, point.z + 13);
-        targetGoal.set(point.x + 2.5, point.y + 0.1, point.z);
-      } else if (cameraModeRef.current === 'side') {
-        cameraGoal.set(midpoint + 1.5, Math.max(5.5, scenePeak + 3.5), Math.max(24, sceneDistance * 1.25));
-        targetGoal.set(midpoint + 1.5, Math.max(1.5, scenePeak * 0.42), 0);
-      } else {
-        cameraGoal.set(midpoint + 2, Math.max(10, scenePeak + 7), Math.max(19, sceneDistance * 0.78));
-        targetGoal.set(midpoint, Math.max(1.2, scenePeak * 0.35), 0);
-      }
-
-      if (progress < 1) {
-        sceneRef.current.flightRaf = requestAnimationFrame(step);
-        return;
-      }
-
-      const landingProgress = clamp((elapsed - duration) / landingDuration, 0, 1);
-      const settle = 1 - Math.pow(1 - landingProgress, 3);
-      plane.position.set(endPoint.x + settle * 0.48, THREE.MathUtils.lerp(endPoint.y, 0.12, settle), endPoint.z);
-      plane.rotation.z = THREE.MathUtils.lerp(plane.rotation.z, 0, 0.12);
-      paperModel.rotation.x = THREE.MathUtils.lerp(paperModel.rotation.x, -Math.PI / 2, 0.14);
-      pathLine.geometry.setDrawRange(0, trailPoints.length);
-      if (landingProgress < 1) {
-        sceneRef.current.flightRaf = requestAnimationFrame(step);
-      } else {
-        sceneRef.current.isFlying = false;
-        forceGroup.visible = false;
-        controls.enabled = cameraModeRef.current === 'overview';
-        if (!isReplay) onResult(result);
-        onFlightState(false);
-        onFlightEvent(null);
-      }
-    };
-    sceneRef.current.flightRaf = requestAnimationFrame(step);
+    state.lastTelemetryAt = 0;
+    if (isReplay) {
+      const coords = result.points.map(point => new THREE.Vector3(point.x * WORLD_X_SCALE, point.y * WORLD_Y_SCALE, point.z * WORLD_Z_SCALE));
+      const curve = new THREE.CatmullRomCurve3(coords, false, 'centripetal', 0.35);
+      const trail = curve.getPoints(Math.max(140, coords.length * 2));
+      pathLine.geometry.setFromPoints(trail);
+      const start = performance.now();
+      const duration = Math.max(1600, result.airtime * 1900);
+      let eventIndex = 0;
+      const replayStep = now => {
+        const progress = clamp((now - start) / duration, 0, 1);
+        const index = Math.min(result.points.length - 1, Math.floor(progress * (result.points.length - 1)));
+        const point = result.points[index];
+        plane.position.copy(curve.getPoint(progress));
+        plane.rotation.set(point.roll || 0, point.yaw || 0, point.pitch || 0);
+        state.pathLine.geometry.setDrawRange(0, Math.max(2, Math.ceil(progress * trail.length)));
+        updateForceArrows(state.forceArrows, forceGroup, point, plane.position);
+        if ((point.t ?? 0) >= state.lastTelemetryAt) {
+          state.lastTelemetryAt = (point.t ?? 0) + 0.08;
+          onTelemetry(makeTelemetry(point));
+        }
+        while (eventIndex < result.events.length && progress >= result.events[eventIndex].progress) {
+          onFlightEvent(result.events[eventIndex]);
+          eventIndex += 1;
+        }
+        if (progress < 1) state.flightRaf = requestAnimationFrame(replayStep);
+        else {
+          state.isFlying = false;
+          forceGroup.visible = false;
+          controls.enabled = cameraModeRef.current === 'overview';
+          onFlightState(false);
+          onFlightEvent(null);
+        }
+      };
+      state.flightRaf = requestAnimationFrame(replayStep);
+    } else {
+      const simulation = createFlightPhysics(settings, 1337);
+      state.flightSimulation = simulation;
+      state.lastSeenEventIndex = 0;
+      const initialPoint = simulation.latestPoint;
+      renderFlightPoint(state, initialPoint, onTelemetry);
+      updateTrail(state, initialPoint);
+      let accumulator = 0;
+      let lastFrame = performance.now();
+      const launchStep = now => {
+        const delta = Math.min(0.05, Math.max(0, (now - lastFrame) / 1000));
+        lastFrame = now;
+        if (!state.paused) accumulator += delta;
+        while (!state.paused && accumulator >= 1 / 60 && !simulation.done) {
+          simulation.step(1 / 60);
+          accumulator -= 1 / 60;
+          const point = simulation.latestPoint;
+          renderFlightPoint(state, point, onTelemetry);
+          updateTrail(state, point);
+          while (state.lastSeenEventIndex < simulation.events.length) {
+            onFlightEvent(simulation.events[state.lastSeenEventIndex]);
+            state.lastSeenEventIndex += 1;
+          }
+        }
+        const point = simulation.latestPoint;
+        if (cameraModeRef.current === 'follow') {
+          cameraGoal.set(plane.position.x - 5.2, plane.position.y + 3.1, plane.position.z + 13);
+          targetGoal.set(plane.position.x + 2.5, plane.position.y + 0.1, plane.position.z);
+        } else if (cameraModeRef.current === 'side') {
+          cameraGoal.set(plane.position.x + 8, Math.max(5.5, plane.position.y + 3.5), Math.max(24, plane.position.x * 1.25));
+          targetGoal.set(plane.position.x + 1.5, Math.max(1.5, plane.position.y * 0.42), 0);
+        } else {
+          cameraGoal.set(Math.max(11, plane.position.x * 0.55), Math.max(10, plane.position.y + 7), Math.max(19, plane.position.x * 0.8));
+          targetGoal.set(plane.position.x * 0.5, Math.max(1.2, plane.position.y * 0.35), 0);
+        }
+        if (simulation.done) {
+          const finalResult = simulation.finish();
+          state.lastResult = finalResult;
+          state.flightSimulation = null;
+          state.isFlying = false;
+          forceGroup.visible = false;
+          controls.enabled = cameraModeRef.current === 'overview';
+          onResult(finalResult);
+          onFlightState(false);
+          onPauseChange(false);
+          onFlightEvent({ label: finalResult.cause, detail: finalResult.verdict, tone: finalResult.cause === '穩定飛行' ? 'peak' : 'danger' });
+          return;
+        }
+        state.flightRaf = requestAnimationFrame(launchStep);
+      };
+      state.flightRaf = requestAnimationFrame(launchStep);
+    }
     return () => {
-      cancelAnimationFrame(sceneRef.current?.flightRaf);
-      if (sceneRef.current) {
-        sceneRef.current.isFlying = false;
-        sceneRef.current.forceGroup.visible = false;
-      }
+      cancelAnimationFrame(state.flightRaf);
+      state.isFlying = false;
+      state.flightSimulation = null;
+      state.forceGroup.visible = false;
       onFlightState(false);
-      onFlightEvent(null);
     };
   }, [flightRequest.id]);
 
   return <div className="scene" ref={host} aria-label="Suzanne 紙飛機 3D 飛行模擬畫面" />;
+}
+
+function makeTelemetry(point) {
+  return {
+    time: point.t ?? 0, speed: point.airSpeed ?? point.speed ?? 0,
+    wind: point.windSpeed ?? 0, pitch: point.pitch ?? 0, roll: point.roll ?? 0,
+    angleOfAttack: point.angleOfAttack ?? 0, lift: point.lift ?? 0,
+    drag: point.drag ?? 0, stalled: Boolean(point.stalled)
+  };
+}
+
+function updateForceArrows(forceArrows, forceGroup, point, position) {
+  forceGroup.position.copy(position);
+  forceArrows.lift.position.set(-0.18, 0.08, 0);
+  forceArrows.weight.position.set(point.cgX ?? 0, 0, 0);
+  forceArrows.thrust.position.set(-1.2, 0, 0);
+  forceArrows.drag.position.set(0.05, 0.03, 0);
+  forceArrows.wind.position.set(0, 0.12, 1.15);
+  const lift = new THREE.Vector3(...(point.liftVector ?? [0, 1, 0]));
+  const drag = new THREE.Vector3(...(point.dragVector ?? [-1, 0, 0]));
+  const wind = new THREE.Vector3(...(point.windVector ?? [0, 0, 0]));
+  forceArrows.lift.setDirection(lift.lengthSq() > 0.0001 ? lift.normalize() : new THREE.Vector3(0, 1, 0));
+  forceArrows.lift.setLength(clamp((point.lift || 0) * 0.2, 0.22, 2.4), 0.24, 0.13);
+  forceArrows.weight.setDirection(new THREE.Vector3(0, -1, 0));
+  forceArrows.weight.setLength(1.4, 0.24, 0.13);
+  forceArrows.thrust.setDirection(new THREE.Vector3(
+    Math.cos(point.pitch || 0) * Math.cos(point.yaw || 0),
+    Math.sin(point.pitch || 0),
+    -Math.sin(point.yaw || 0)
+  ).normalize());
+  forceArrows.thrust.setLength(clamp((point.speed || 0) * 0.14, 0.25, 1.8), 0.24, 0.13);
+  forceArrows.drag.setDirection(drag.lengthSq() > 0.0001 ? drag.normalize() : new THREE.Vector3(-1, 0, 0));
+  forceArrows.drag.setLength(clamp((point.drag || 0) * 0.24, 0.22, 1.7), 0.24, 0.13);
+  forceArrows.wind.visible = wind.lengthSq() > 0.001;
+  if (forceArrows.wind.visible) {
+    forceArrows.wind.setDirection(wind.normalize());
+    forceArrows.wind.setLength(clamp((point.windSpeed || 0) * 0.13, 0.22, 1.8), 0.24, 0.13);
+  }
+}
+
+function renderFlightPoint(state, point, onTelemetry) {
+  const { plane, forceArrows, forceGroup, wingFlexGroups } = state;
+  plane.position.set(point.x * WORLD_X_SCALE, point.y * WORLD_Y_SCALE, point.z * WORLD_Z_SCALE);
+  plane.rotation.set(point.roll || 0, point.yaw || 0, point.pitch || 0);
+  wingFlexGroups.left.rotation.z = point.flexLeft || 0;
+  wingFlexGroups.right.rotation.z = point.flexRight || 0;
+  updateForceArrows(forceArrows, forceGroup, point, plane.position);
+  if (onTelemetry && (point.t ?? 0) >= (state.lastTelemetryAt ?? 0)) {
+    state.lastTelemetryAt = (point.t ?? 0) + 0.08;
+    onTelemetry(makeTelemetry(point));
+  }
+}
+
+function updateTrail(state, point) {
+  const positions = state.pathLine.geometry.attributes.position;
+  const count = state.pathLine.geometry.drawRange.count;
+  if (count >= positions.count) return;
+  const offset = count * 3;
+  positions.array[offset] = point.x * WORLD_X_SCALE;
+  positions.array[offset + 1] = point.y * WORLD_Y_SCALE;
+  positions.array[offset + 2] = point.z * WORLD_Z_SCALE;
+  positions.needsUpdate = true;
+  state.pathLine.geometry.setDrawRange(0, count + 1);
 }
 
 function Slider({ label, value, min, max, step = 1, unit, onChange }) {
@@ -802,7 +844,7 @@ function Slider({ label, value, min, max, step = 1, unit, onChange }) {
 }
 
 function App() {
-  const [settings, setSettings] = useState({ goal: 'far', clipCount: 1, clipPosition: 22, clipPlacement: 'body', throwAngle: 10, throwPower: 55, wind: 0, windDirection: 'front', weather: 'clear' });
+  const [settings, setSettings] = useState({ goal: 'far', clipCount: 1, clipPosition: 22, clipPlacement: 'body', wingArea: DEFAULT_WING_AREA, throwAngle: 10, throwPower: 55, wind: 0, windDirection: 'front', gustStrength: 0.35, turbulence: 0.2, gustDelay: 1.1, wingSoftness: 0.25, weather: 'clear' });
   const [flightRequest, setFlightRequest] = useState({ id: 0, mode: 'launch' });
   const [result, setResult] = useState(null);
   const [previousResult, setPreviousResult] = useState(null);
@@ -812,6 +854,9 @@ function App() {
   const [cameraMode, setCameraMode] = useState('side');
   const [isAnimating, setIsAnimating] = useState(false);
   const [flightEvent, setFlightEvent] = useState(null);
+  const [telemetry, setTelemetry] = useState(null);
+  const [flightPaused, setFlightPaused] = useState(false);
+  const [stepRequest, setStepRequest] = useState({ id: 0 });
   const update = (key, value) => {
     setSettings(current => ({ ...current, [key]: value }));
     setPrediction(null);
@@ -878,23 +923,29 @@ function App() {
   };
 
   const reset = () => {
-    setSettings({ goal: 'far', clipCount: 1, clipPosition: 22, clipPlacement: 'body', throwAngle: 10, throwPower: 55, wind: 0, windDirection: 'front', weather: 'clear' });
+    setSettings({ goal: 'far', clipCount: 1, clipPosition: 22, clipPlacement: 'body', wingArea: DEFAULT_WING_AREA, throwAngle: 10, throwPower: 55, wind: 0, windDirection: 'front', gustStrength: 0.35, turbulence: 0.2, gustDelay: 1.1, wingSoftness: 0.25, weather: 'clear' });
     setResult(null);
     setPreviousResult(null);
     setPrediction(null);
     setPredictionFeedback(null);
     setCameraMode('side');
     setIsAnimating(false);
+    setFlightPaused(false);
+    setTelemetry(null);
     setFlightRequest({ id: 0, mode: 'launch' });
     setFlightEvent(null);
   };
 
   return (
     <main className="app-shell">
-      <FlightScene settings={settings} flightRequest={flightRequest} replayResult={result} onResult={handleResult} onFlightState={setIsAnimating} onFlightEvent={setFlightEvent} showForces={showForces} cameraMode={cameraMode} />
+      <FlightScene settings={settings} flightRequest={flightRequest} replayResult={result} onResult={handleResult} onFlightState={setIsAnimating} onFlightEvent={setFlightEvent} onTelemetry={setTelemetry} showForces={showForces} cameraMode={cameraMode} flightPaused={flightPaused} onPauseChange={setFlightPaused} stepRequest={stepRequest} />
       <header className="topbar">
         <div className="brand"><Plane size={22} /><span>Suzanne <b>飛行實驗室</b></span></div>
         <div className="record">世界紀錄機型 · 教學模擬</div>
+        {isAnimating && <div className="flight-controls">
+          <button className="force-toggle" aria-pressed={flightPaused} onClick={() => setFlightPaused(value => !value)}>{flightPaused ? <Play size={16} /> : <Pause size={16} />}{flightPaused ? '繼續' : '暫停'}</button>
+          <button className="force-toggle" disabled={!flightPaused} onClick={() => setStepRequest(value => ({ id: value.id + 1 }))}><StepForward size={16} />單步</button>
+        </div>}
         <button className="force-toggle" aria-pressed={showForces} onClick={() => setShowForces(value => !value)}>
           {showForces ? <Eye size={17} /> : <EyeOff size={17} />}受力
         </button>
@@ -904,6 +955,7 @@ function App() {
       {showForces && <div className="force-legend" aria-label="飛行力量圖例">
         <span><i className="lift-dot" />升力</span><span><i className="weight-dot" />重力</span>
         <span><i className="thrust-dot" />前進</span><span><i className="drag-dot" />阻力</span>
+        <span><i className="wind-dot" />風力</span>
       </div>}
 
       <div className="view-modes" aria-label="觀看模式">
@@ -966,9 +1018,33 @@ function App() {
         </section>
 
         <section>
+          <h2>紙飛機大小</h2>
+          <div className="wing-size-options" role="group" aria-label="翼面積大小">
+            {WING_AREA_OPTIONS.map(option => (
+              <button
+                key={option.value}
+                type="button"
+                className={settings.wingArea === option.value ? 'selected' : ''}
+                aria-pressed={settings.wingArea === option.value}
+                onClick={() => update('wingArea', option.value)}
+              >
+                <strong>{option.label}</strong><span>{option.area}</span>
+              </button>
+            ))}
+          </div>
+          <p className="wing-area-note">翼面積增加會同時增加升力與阻力；這是簡化的飛行模型。</p>
+        </section>
+
+        <section>
           <h2>投擲設定</h2>
           <Slider label="仰角" value={settings.throwAngle} min={0} max={30} unit="°" onChange={v => update('throwAngle', v)} />
           <Slider label="力道" value={settings.throwPower} min={20} max={100} unit="%" onChange={v => update('throwPower', v)} />
+          <h2 className="environment-title">風場實驗</h2>
+          <Slider label="陣風強度" value={settings.gustStrength} min={0} max={1} step={0.05} unit="×" onChange={v => update('gustStrength', v)} />
+          <Slider label="亂流程度" value={settings.turbulence} min={0} max={1} step={0.05} unit="×" onChange={v => update('turbulence', v)} />
+          <Slider label="陣風出現時間" value={settings.gustDelay} min={0} max={5} step={0.25} unit=" s" onChange={v => update('gustDelay', v)} />
+          <Slider label="機翼柔軟度" value={settings.wingSoftness} min={0} max={1} step={0.05} unit="×" onChange={v => update('wingSoftness', v)} />
+          <p className="wind-note">翼面積和風速會改變氣動力；機翼彎曲目前是視覺上的彈性效果。</p>
           <Slider label="風速" value={settings.wind} min={settings.windDirection === 'front' ? -10 : 0} max={10} unit=" m/s" onChange={v => update('wind', v)} />
           <div className="wind-presets" aria-label="風速快速設定">
             {settings.windDirection === 'front' ? <>
@@ -1014,6 +1090,15 @@ function App() {
           {result && <button className="replay" disabled={isAnimating} onClick={replay}><Rewind size={18} />慢動作重播</button>}
         </div>
       </aside>
+
+      {isAnimating && telemetry && <section className="flight-hud" aria-live="polite" aria-label="飛行即時儀表">
+        <strong>{flightPaused ? '已暫停' : '即時飛行'}</strong>
+        <span>時間 {telemetry.time.toFixed(1)} s</span><span>空速 {telemetry.speed.toFixed(1)} m/s</span>
+        <span>風速 {telemetry.wind.toFixed(1)} m/s</span><span>仰角 {(telemetry.pitch * 180 / Math.PI).toFixed(0)}°</span>
+        <span>側傾 {(telemetry.roll * 180 / Math.PI).toFixed(0)}°</span><span>迎角 {telemetry.angleOfAttack.toFixed(0)}°</span>
+        <span>升力 {telemetry.lift.toFixed(2)}</span><span>阻力 {telemetry.drag.toFixed(2)}</span>
+        {telemetry.stalled && <b className="stall-indicator">失速中</b>}
+      </section>}
 
       <section className="telemetry" aria-live="polite">
         <div><Gauge size={17} /><span>預估{settings.goal === 'far' ? '距離' : '高度'}</span><strong>{score === null ? '--' : score.toFixed(1)}<small> m</small></strong></div>
