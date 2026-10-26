@@ -322,6 +322,10 @@ button:focus-visible { outline-color: var(--sky); }
 .paper-tone-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 0 14px; }
 .paper-tone-options button { display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 4px; border: 1px solid #dfe9e4; border-radius: 7px; background: #fbfdfc; color: #526c62; font-size: 9px; font-weight: 700; }
 .paper-tone-options button.selected { border-color: var(--green); background: var(--green-soft); color: #145e45; box-shadow: inset 0 0 0 1px rgba(47,155,115,.28); }
+.paper-tone-options button > span { display: grid; gap: 1px; text-align: left; }
+.paper-tone-options button strong { font-size: 9px; }
+.paper-tone-options button small { color: #71877e; font-size: 8px; font-weight: 600; }
+.paper-performance { margin: -7px 0 13px; padding: 7px 8px; border-left: 2px solid var(--sky); border-radius: 0 6px 6px 0; background: #eff7f7; color: #476b6a; font-size: 9px; line-height: 1.5; }
 .paper-swatch { width: 12px; height: 12px; border: 1px solid rgba(23,61,50,.18); border-radius: 50%; }
 .paper-swatch.white { background: #f8fbf8; }.paper-swatch.ivory { background: #eadbb3; }.paper-swatch.blue { background: #c8e5f3; }
 .scenario-presets button { display: flex; align-items: center; justify-content: flex-start; gap: 6px; text-align: left; }
@@ -354,11 +358,19 @@ button:focus-visible { outline-color: var(--sky); }
 .chart-event.wind circle { fill: #77cde0; }
 .chart-event.peak circle { fill: #a5d98d; }
 .chart-axis { display: flex; justify-content: space-between; color: #8faea0; font-size: 8px; }
+.chart-legend { display: flex; gap: 12px; margin-top: 5px; color: #b7d2c6; font-size: 9px; }
+.chart-legend span { display: flex; align-items: center; gap: 5px; }
+.chart-legend i { width: 15px; height: 0; border-top: 2px solid #4b9b78; }
+.chart-legend i.previous-line { border-color: #c5d6cf; border-top-style: dashed; }
 .flight-chart-events { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .flight-chart-events span { padding: 3px 6px; border-radius: 999px; background: rgba(255,255,255,.1); color: #d5e9dd; font-size: 8px; }
 .flight-chart-events span.danger { background: rgba(201,79,69,.24); color: #ffd8d2; }
 .flight-chart-events span.wind { background: rgba(60,144,167,.25); color: #c6f0fa; }
 .flight-chart-events span.peak { background: rgba(91,173,126,.22); color: #d7f4df; }
+
+.app-shell.is-flying .force-panel { top: 76px; }
+.app-shell.is-flying .force-panel .force-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px 10px; max-width: 250px; }
+.app-shell.is-flying .flight-hud { top: 154px; }
 
 .app-shell.dark-theme {
   --forest: #e7f2ec;
@@ -418,6 +430,8 @@ button:focus-visible { outline-color: var(--sky); }
 .dark-theme .replay { border-color: #496458; background: #20382f; color: #d6e8de; }
 .dark-theme .flight-chart { background: rgba(0,0,0,.18); }
 .dark-theme .flight-chart-events span { background: rgba(255,255,255,.12); }
+.dark-theme .paper-tone-options button small { color: #b0c8bd; }
+.dark-theme .paper-performance { border-left-color: var(--sky); background: #233d3c; color: #c6e0db; }
 .dark-theme .view-modes button.active { background: #74c49b; color: #173d32; }
 .dark-theme .force-toggle[aria-pressed='true'], .dark-theme .header-tools .icon-button[aria-pressed='true'] { background: #244b3d; color: #ddf9e9; }
 
@@ -443,6 +457,10 @@ button:focus-visible { outline-color: var(--sky); }
   .control-panel.has-result { padding-bottom: 290px; }
   .telemetry { gap: 8px; }
   .flight-chart { margin-top: 5px; }
+  .app-shell.is-flying .force-panel { top: 66px; right: 12px; }
+  .app-shell.is-flying .force-panel .force-legend { max-width: 250px; gap: 5px 8px; padding: 7px 8px; }
+  .app-shell.is-flying .flight-hud { top: 139px; right: 10px; }
+  .app-shell.is-flying .flight-event { top: 75px; left: 12px; transform: none; }
 }
 
 @media (max-width: 430px) {
@@ -455,4 +473,52 @@ button:focus-visible { outline-color: var(--sky); }
   .paper-tone-options button { min-height: 40px; font-size: 8px; }
   .telemetry { grid-template-columns: 1fr 1fr; }
   .flight-chart { grid-column: 1 / -1; }
+}
+
+/* Readability pass: raise the smallest text and touch targets across the UI. */
+.record, .force-toggle, .view-modes button, .view-hint, .view-hint-reopen,
+.force-legend span, .wind-compass, .flight-hud { font-size: 12px; }
+.flight-hud strong { font-size: 14px; }
+.flight-event strong { font-size: 14px; }
+.flight-event span { font-size: 12px; }
+.panel-head small { font-size: 12px; }
+.control-panel section h2 { font-size: 15px; }
+.control-panel section.setting-card.recommended h2::after { font-size: 10px; }
+.experiment-steps button { font-size: 12px; }
+.setup-status, .position-label, .wind-effect-note, .wing-area-note,
+.advanced-settings > p, .slider-hint { font-size: 11px; }
+.goal-options button, .placement-options button, .scenario-presets button,
+.weather-options button, .prediction-options button { min-height: 42px; font-size: 12px; }
+.card-subheading, .stepper-row, .slider-row > span:first-child { font-size: 13px; }
+.wing-size-options strong { font-size: 13px; }
+.wing-size-options span { font-size: 11px; }
+.paper-tone-options button { min-height: 44px; font-size: 11px; }
+.paper-tone-options button strong { font-size: 11px; }
+.paper-tone-options button small, .paper-performance { font-size: 10px; }
+.status-summary, .balance-status, .cg-status { font-size: 11px; }
+.slider-row strong { font-size: 14px; }
+.slider-ticks { font-size: 10px !important; }
+.advanced-settings summary { font-size: 14px; }
+.flight-actions .prediction-section h2 { font-size: 14px; }
+.flight-actions .prediction-options button { min-height: 40px; font-size: 11px; }
+.launch { min-height: 50px; font-size: 15px; }
+.replay { min-height: 44px; font-size: 13px; }
+.telemetry span { font-size: 12px; }
+.telemetry p { font-size: 13px; }
+.chart-head { font-size: 12px; }
+.chart-tabs button { min-height: 30px; font-size: 10px; }
+.chart-axis, .chart-legend, .flight-chart-events span { font-size: 10px; }
+.flight-stages { font-size: 9px; }
+.view-modes button { height: 36px; }
+.stepper button { height: 36px; }
+.wind-wheel button { width: 32px; height: 32px; }
+.icon-button { min-width: 40px; min-height: 40px; }
+
+@media (max-width: 760px) {
+  .control-panel section h2 { font-size: 16px; }
+  .goal-options button, .placement-options button, .scenario-presets button,
+  .weather-options button, .prediction-options button { min-height: 44px; font-size: 12px; }
+  .record, .view-hint, .view-hint-reopen, .flight-hud { font-size: 11px; }
+  .telemetry { gap: 10px; }
+  .chart-axis, .chart-legend, .flight-chart-events span { font-size: 10px; }
 }

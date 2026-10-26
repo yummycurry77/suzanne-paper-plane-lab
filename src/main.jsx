@@ -16,6 +16,11 @@ const WING_AREA_OPTIONS = [
   { value: DEFAULT_WING_AREA, label: '中型', area: '0.030 m²' },
   { value: 0.036, label: '大型', area: '0.036 m²' }
 ];
+const PAPER_TYPES = [
+  { value: 'white', label: '影印紙', mass: '5.0 g', description: '標準重量與硬度，作為比較用的均衡基準。', color: '#f8fbf8', roughness: 0.72, fold: '#92aaa1' },
+  { value: 'ivory', label: '筆記紙', mass: '4.4 g', description: '較輕、紙面較柔，姿態更容易隨風變動；實際距離和滯空會依風場而變。', color: '#eadbb3', roughness: 0.92, fold: '#a88f5b' },
+  { value: 'blue', label: '實驗紙', mass: '7.2 g', description: '較重、機翼較挺，受陣風推動較不明顯；較難爬高，低阻力下部分情境可能飛得更遠。', color: '#c8e5f3', roughness: 0.58, fold: '#6e9eb3' }
+];
 const EXPERIMENT_GOALS = [
   { value: 'far', label: '飛得更遠' },
   { value: 'high', label: '飛得更高' },
@@ -44,6 +49,7 @@ function makePlane() {
     shape.closePath();
     const geo = new THREE.ShapeGeometry(shape);
     const mesh = new THREE.Mesh(geo, paper);
+    mesh.userData.paperSurface = true;
     return mesh;
   };
   const wingGroup = new THREE.Group();
@@ -53,6 +59,8 @@ function makePlane() {
     new THREE.Vector3(-4.5, 0, 0), new THREE.Vector3(5.35, 0, 0), new THREE.Vector3(-2.2, 0, -0.55), new THREE.Vector3(-4.5, 0, 0)
   ]);
   const keel = new THREE.Mesh(keelGeo, new THREE.MeshStandardMaterial({ color: '#dce9e3', side: THREE.DoubleSide }));
+  keel.userData.paperSurface = true;
+  keel.userData.paperCore = true;
   keel.rotation.x = Math.PI / 2;
   group.add(keel);
 
@@ -60,7 +68,9 @@ function makePlane() {
     const crease = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-3.9, side * 1.15, 0.02), new THREE.Vector3(4.95, side * 0.45, 0.02)
     ]);
-    wingGroup.add(new THREE.Line(crease, fold));
+    const creaseLine = new THREE.Line(crease, fold);
+    creaseLine.userData.paperFold = true;
+    wingGroup.add(creaseLine);
   });
   group.add(wingGroup);
   group.rotation.x = -Math.PI / 2;
@@ -799,11 +809,13 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
   useEffect(() => {
     const plane = sceneRef.current?.plane;
     if (!plane) return;
-    const colors = { white: '#f8fbf8', ivory: '#eadbb3', blue: '#c8e5f3' };
+    const paperType = PAPER_TYPES.find(type => type.value === paperTone) ?? PAPER_TYPES[0];
     plane.userData.paperModel.traverse(object => {
-      if (object.isMesh && object.material?.color && object.material.color.getHexString() !== 'dce9e3') {
-        object.material.color.set(colors[paperTone] ?? colors.white);
+      if (object.userData.paperSurface && object.material?.color) {
+        object.material.color.set(object.userData.paperCore ? '#dce9e3' : paperType.color);
+        object.material.roughness = paperType.roughness;
       }
+      if (object.userData.paperFold && object.material?.color) object.material.color.set(paperType.fold);
     });
   }, [paperTone]);
 
@@ -1009,7 +1021,7 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
       state.flightRaf = requestAnimationFrame(replayStep);
     } else {
       state.activeFlightId = flightRequest.id;
-      const simulation = createFlightPhysics(settings, 1337);
+      const simulation = createFlightPhysics({ ...settings, paperTone }, 1337);
       state.flightSimulation = simulation;
       state.lastSeenEventIndex = 0;
       const initialPoint = simulation.latestPoint;
@@ -1177,7 +1189,7 @@ function Slider({ label, value, min, max, step = 1, unit, tone = 'coral', hint, 
   );
 }
 
-function FlightChart({ result }) {
+function FlightChart({ result, previousResult }) {
   const [metric, setMetric] = useState('altitude');
   if (!result?.points?.length) return null;
   const metrics = {
@@ -1188,23 +1200,35 @@ function FlightChart({ result }) {
   };
   const selected = metrics[metric];
   const source = result.points;
-  const samples = Array.from({ length: Math.min(56, source.length) }, (_, index) => source[Math.round(index * (source.length - 1) / (Math.min(56, source.length) - 1 || 1))]);
-  const values = samples.map(selected.value);
-  const min = Math.min(0, ...values);
-  const max = Math.max(0.1, ...values);
-  const path = values.map((value, index) => {
-    const x = 4 + index * 292 / Math.max(1, values.length - 1);
+  const sampleValues = points => {
+    if (!points?.length) return [];
+    const count = Math.min(56, points.length);
+    return Array.from({ length: count }, (_, index) => selected.value(points[Math.round(index * (points.length - 1) / Math.max(1, count - 1))]));
+  };
+  const values = sampleValues(source);
+  const previousValues = sampleValues(previousResult?.points);
+  const min = Math.min(0, ...values, ...previousValues);
+  const dataMax = Math.max(0.1, ...values, ...previousValues);
+  const max = metric === 'altitude'
+    ? Math.max(5, Math.ceil(Math.max(result.peak, previousResult?.peak ?? 0) / 5) * 5)
+    : dataMax * 1.05;
+  const makePath = series => series.map((value, index) => {
+    const x = 4 + index * 292 / Math.max(1, series.length - 1);
     const y = 54 - ((value - min) / (max - min || 1)) * 48;
     return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
+  const path = makePath(values);
   const finalValue = selected.value(source.at(-1));
   return <div className="flight-chart" aria-label="飛行數據圖表">
-    <div className="chart-head"><strong>飛行數據</strong><span>{selected.label} {finalValue.toFixed(1)} {selected.unit}</span></div>
+    <div className="chart-head"><strong>{metric === 'altitude' ? '高度變化' : '飛行數據'}</strong><span>{metric === 'altitude'
+      ? previousResult ? `本次最高 ${result.peak.toFixed(1)} m · 上次最高 ${previousResult.peak.toFixed(1)} m` : `最高 ${result.peak.toFixed(1)} m · 落地 ${finalValue.toFixed(1)} m`
+      : `${selected.label} ${finalValue.toFixed(1)} ${selected.unit}`}</span></div>
     <div className="chart-tabs" role="group" aria-label="圖表資料">
       {Object.entries(metrics).map(([key, item]) => <button key={key} className={metric === key ? 'active' : ''} onClick={() => setMetric(key)}>{item.label}</button>)}
     </div>
     <svg viewBox="0 0 300 60" role="img" aria-label={`${selected.label}隨時間變化`}>
-      <path className="chart-gridline" d="M4 18H296 M4 38H296" />
+      <path className="chart-gridline" d="M4 6H296 M4 30H296 M4 54H296" />
+      {previousValues.length > 0 && <path d={makePath(previousValues)} fill="none" stroke="#c5d6cf" strokeWidth="2" strokeDasharray="4 3" strokeLinecap="round" strokeLinejoin="round" />}
       <path d={path} fill="none" stroke={selected.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       {(result.events ?? []).map((event, index) => {
         const x = 4 + clamp(event.progress ?? 0, 0, 1) * 292;
@@ -1217,7 +1241,8 @@ function FlightChart({ result }) {
         </g>;
       })}
     </svg>
-    <div className="chart-axis"><span>起飛</span><span>時間</span><span>落地</span></div>
+    <div className="chart-axis"><span>{metric === 'altitude' ? `高度刻度 0–${max.toFixed(0)} m` : `${selected.label}隨時間變化`}</span><span>起飛 → 落地</span></div>
+    {previousValues.length > 0 && <div className="chart-legend"><span><i className="current-line" />本次</span><span><i className="previous-line" />上次</span></div>}
     {result.events?.length > 0 && <div className="flight-chart-events" aria-label="飛行事件">{result.events.map((event, index) => <span key={`${event.label}-${index}`} className={event.tone ?? ''} title={event.detail}>{event.label}</span>)}</div>}
   </div>;
 }
@@ -1419,7 +1444,7 @@ function App() {
   };
 
   return (
-    <main className={`app-shell ${sceneTheme === 'dark' ? 'dark-theme' : ''} ${highContrast ? 'high-contrast' : ''}`}>
+    <main className={`app-shell ${sceneTheme === 'dark' ? 'dark-theme' : ''} ${highContrast ? 'high-contrast' : ''} ${isAnimating ? 'is-flying' : ''}`}>
       <FlightScene settings={settings} flightRequest={flightRequest} replayResult={result} onResult={handleResult} onFlightState={setIsAnimating} onFlightEvent={setFlightEvent} onTelemetry={handleTelemetry} showForces={showForces} cameraMode={cameraMode} flightPaused={flightPaused} onPauseChange={setFlightPaused} stepRequest={stepRequest} sceneTheme={sceneTheme} paperTone={paperTone} replaySpeed={replaySpeed} replaySeek={replaySeek} />
       <header className="topbar">
         <div className="brand"><Plane size={22} /><span><strong>紙飛機</strong><b>PHYSICS LAB</b></span></div>
@@ -1491,8 +1516,9 @@ function App() {
         <section id="plane-step" className={`setting-card plane-card ${settings.goal === 'balance' ? 'recommended' : ''}`}>
           <h2><Plane size={16} />紙飛機</h2>
           <div className="paper-tone-options" role="group" aria-label="紙張外觀">
-            {[['white', '影印紙'], ['ivory', '筆記紙'], ['blue', '實驗紙']].map(([tone, label]) => <button key={tone} className={paperTone === tone ? 'selected' : ''} aria-pressed={paperTone === tone} onClick={() => setPaperTone(tone)}><i className={`paper-swatch ${tone}`} />{label}</button>)}
+            {PAPER_TYPES.map(type => <button key={type.value} className={paperTone === type.value ? 'selected' : ''} aria-label={`${type.label}，紙飛機重量約 ${type.mass}。${type.description}`} aria-pressed={paperTone === type.value} onClick={() => setPaperTone(type.value)}><i className={`paper-swatch ${type.value}`} /><span><strong>{type.label}</strong><small>{type.mass}</small></span></button>)}
           </div>
+          <p className="paper-performance"><strong>估重為紙機身，不含迴紋針。</strong><br />{PAPER_TYPES.find(type => type.value === paperTone)?.description}</p>
           <div className="placement-options" aria-label="迴紋針放置區域">
             <button className={settings.clipPlacement === 'body' ? 'selected' : ''} onClick={() => update('clipPlacement', 'body')}>機身</button>
             <button className={settings.clipPlacement === 'left' ? 'selected' : ''} onClick={() => update('clipPlacement', 'left')}>左翼</button>
@@ -1634,7 +1660,7 @@ function App() {
         <p>{comparison
           ? `和上次相比：距離 ${comparison.distance >= 0 ? '+' : ''}${comparison.distance.toFixed(1)} m，高度 ${comparison.peak >= 0 ? '+' : ''}${comparison.peak.toFixed(1)} m，滯空 ${comparison.airtime >= 0 ? '+' : ''}${comparison.airtime.toFixed(1)} s，側偏 ${comparison.deviation >= 0 ? '+' : ''}${comparison.deviation.toFixed(1)} m，穩定度 ${(comparison.stability * 100) >= 0 ? '+' : ''}${(comparison.stability * 100).toFixed(0)}%。`
           : result?.verdict ?? '先建立基準試飛，再修改一個參數並預測結果。'}</p>
-        {result && <FlightChart result={result} />}
+        {result && <FlightChart result={result} previousResult={previousResult} />}
       </section>
 
       <div className="hint">全景模式可拖曳旋轉 · 雙指縮放</div>
