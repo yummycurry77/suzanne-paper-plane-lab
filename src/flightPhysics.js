@@ -5,6 +5,11 @@ const GRAVITY = 9.81;
 const AERO_TO_SIMULATION_SCALE = 0.046;
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const clipMultiplier = placement => placement === 'both' ? 2 : 1;
+const PAPER_PROPERTIES = {
+  white: { mass: 0.005, lift: 1, drag: 1, flex: 1 },
+  ivory: { mass: 0.0044, lift: 0.98, drag: 1.06, flex: 1.2 },
+  blue: { mass: 0.0072, lift: 0.96, drag: 0.94, flex: 0.62 }
+};
 
 function windDirectionVector(direction, speed) {
   if (direction === 'left') return new THREE.Vector3(0, 0, speed);
@@ -16,8 +21,9 @@ export function createFlightPhysics(settings, seed = 1337) {
   const wingArea = settings.wingArea ?? 0.03;
   const clipCount = settings.clipCount ?? 1;
   const clipPlacement = settings.clipPlacement ?? 'body';
+  const paper = PAPER_PROPERTIES[settings.paperTone] ?? PAPER_PROPERTIES.white;
   const totalClips = clipCount * clipMultiplier(clipPlacement);
-  const mass = 0.005 + totalClips * 0.00045;
+  const mass = paper.mass + totalClips * 0.00045;
   const cg = clipCount === 0 ? 37 : 37 - totalClips * (45 - settings.clipPosition) * 0.11;
   const stability = clamp(1 - Math.abs(cg - 30) / 24, 0.35, 1);
   const noseHeavy = clamp((30 - cg) / 13, -0.75, 0.75);
@@ -29,7 +35,7 @@ export function createFlightPhysics(settings, seed = 1337) {
   const gustStrength = settings.gustStrength ?? 0.35;
   const turbulence = settings.turbulence ?? 0.2;
   const gustDelay = settings.gustDelay ?? 1.1;
-  const softness = settings.wingSoftness ?? 0.25;
+  const softness = (settings.wingSoftness ?? 0.25) * paper.flex;
   const randomPhase = (seed % 997) / 997 * Math.PI * 2;
   const position = new THREE.Vector3(0, settings.initialHeight ?? 1.35, 0);
   const velocity = new THREE.Vector3(startSpeed * Math.cos(angle), startSpeed * Math.sin(angle), 0);
@@ -55,6 +61,7 @@ export function createFlightPhysics(settings, seed = 1337) {
   };
   const sample = () => ({
     x: position.x, y: Math.max(0, position.y), z: position.z, t: elapsed,
+    peak, verticalSpeed: velocity.y,
     cgX: 1.6 - cg * 0.03,
     pitch: attitude.pitch, roll: attitude.roll, yaw: attitude.yaw,
     lift: lastForces.lift, drag: lastForces.drag,
@@ -90,10 +97,10 @@ export function createFlightPhysics(settings, seed = 1337) {
     const liftCoefficient = stalled
       ? 0.13 + 0.12 * Math.exp(-Math.max(0, absoluteAoA - 32) * 0.05)
       : clamp(0.42 + angleOfAttack * 0.055, 0.08, 1.1);
-    const dragCoefficient = (0.16 + 0.075 * liftCoefficient ** 2) * (stalled ? 2.8 : 1);
+    const dragCoefficient = (0.16 + 0.075 * liftCoefficient ** 2) * paper.drag * (stalled ? 2.8 : 1);
     const dynamicPressure = 0.5 * AIR_DENSITY * airSpeed * airSpeed;
     const forceScale = AERO_TO_SIMULATION_SCALE * wingArea;
-    const liftMagnitude = dynamicPressure * forceScale * liftCoefficient / mass * stability * (settings.goal === 'high' ? 1.04 : 1);
+    const liftMagnitude = dynamicPressure * forceScale * liftCoefficient * paper.lift / mass * stability * (settings.goal === 'high' ? 1.04 : 1);
     const dragMagnitude = dynamicPressure * forceScale * dragCoefficient / mass;
     const horizontalRelative = new THREE.Vector3(relativeVelocity.x, 0, relativeVelocity.z).normalize();
     const dragVector = relativeVelocity.clone().normalize().multiplyScalar(-dragMagnitude);
@@ -152,7 +159,7 @@ export function createFlightPhysics(settings, seed = 1337) {
     }
     if (stalledFor > 0.45) cause = '失速後下墜';
     if (stalledFor > 1.4 && stability < 0.6) cause = '重心不穩且持續失速';
-    if (position.y <= 0 || elapsed >= 12 || (position.x > 110 && position.y < 0.2)) {
+    if (position.y <= 0 || elapsed >= 12 || (position.x > 100 && position.y < 0.2)) {
       position.y = Math.max(0, position.y);
       done = true;
       addEvent(elapsed, cause, cause === '穩定飛行' ? '飛機完成飛行' : '受力與姿態變化造成飛行失控', cause === '穩定飛行' ? 'peak' : 'danger');
@@ -169,7 +176,7 @@ export function createFlightPhysics(settings, seed = 1337) {
       : '配重和翼面在這次風場下維持飛行。');
     return {
       points, distance: last.x, peak, airtime: last.t, deviation: last.z,
-      cg, stability, verdict, events: events.map(event => ({ ...event, progress: event.time / Math.max(last.t, 0.01) })),
+      cg, stability, paperMass: mass, verdict, events: events.map(event => ({ ...event, progress: event.time / Math.max(last.t, 0.01) })),
       cause, settings: { ...settings }, seed
     };
   }
