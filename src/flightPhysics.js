@@ -23,7 +23,7 @@ export function createFlightPhysics(settings, seed = 1337) {
   const noseHeavy = clamp((30 - cg) / 13, -0.75, 0.75);
   const asymmetry = clipPlacement === 'left' ? 1 : clipPlacement === 'right' ? -1 : 0;
   const presetSideLoad = asymmetry * clipCount * 4.5;
-  const startSpeed = 5.8 + settings.throwPower * 0.12;
+  const startSpeed = 7 + settings.throwPower * 0.14;
   const angle = THREE.MathUtils.degToRad(settings.throwAngle);
   const windBase = windDirectionVector(settings.windDirection, settings.wind);
   const gustStrength = settings.gustStrength ?? 0.35;
@@ -31,7 +31,7 @@ export function createFlightPhysics(settings, seed = 1337) {
   const gustDelay = settings.gustDelay ?? 1.1;
   const softness = settings.wingSoftness ?? 0.25;
   const randomPhase = (seed % 997) / 997 * Math.PI * 2;
-  const position = new THREE.Vector3(0, 1.35, 0);
+  const position = new THREE.Vector3(0, settings.initialHeight ?? 1.35, 0);
   const velocity = new THREE.Vector3(startSpeed * Math.cos(angle), startSpeed * Math.sin(angle), 0);
   const attitude = { pitch: angle, roll: 0, yaw: 0 };
   const angularVelocity = { pitch: 0, roll: 0, yaw: 0 };
