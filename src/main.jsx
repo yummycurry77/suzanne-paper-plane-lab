@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as THREE from 'three';
 import { createFlightPhysics } from './flightPhysics.js';
+import { COIN_CHALLENGE_ATTEMPTS, COIN_LANES, COIN_TARGETS } from './coinChallenge.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ArrowUpRight, Brain, Camera, CheckCircle2, ChevronDown, CloudRain, Contrast, Crosshair, Eye, EyeOff, Gauge, Info, Moon, Pause, Play, Plane, Rewind, RotateCcw, Scale, StepForward, Sun, Wind, X } from 'lucide-react';
+import { ArrowUpRight, Brain, Camera, CheckCircle2, ChevronDown, CloudRain, Coins, Contrast, Crosshair, Eye, EyeOff, Gauge, Info, Moon, Pause, Play, Plane, Rewind, RotateCcw, Scale, StepForward, Sun, Wind, X } from 'lucide-react';
 import './styles.css';
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -169,6 +170,56 @@ function makeDistanceMarker(distance) {
   label.position.y = 1.65;
   marker.add(pole, label);
   return marker;
+}
+
+function makeCoin(target) {
+  const coin = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({
+    color: target.color,
+    emissive: target.color,
+    emissiveIntensity: 0.12,
+    metalness: 0.76,
+    roughness: 0.22
+  });
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 28), material);
+  face.rotation.x = Math.PI / 2;
+  face.castShadow = true;
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.31, 0.045, 8, 24),
+    new THREE.MeshStandardMaterial({ color: '#fff0a3', emissive: '#ffe28a', emissiveIntensity: 0.1, metalness: 0.65, roughness: 0.2 })
+  );
+  rim.position.z = 0.065;
+  coin.add(face, rim);
+  coin.userData.coinId = target.id;
+  coin.userData.lane = target.lane;
+  return coin;
+}
+
+function makeCoinChallengeGroup() {
+  const group = new THREE.Group();
+  group.name = 'coin-challenge-targets';
+  const targets = COIN_TARGETS.map(target => {
+    const mesh = makeCoin(target);
+    mesh.position.set(target.x, target.y, target.z);
+    group.add(mesh);
+    return { ...target, mesh, collected: false };
+  });
+  return { group, targets };
+}
+
+function updateCoinChallenge(state, delta, now, planePosition, onCoinCollected) {
+  if (!state.coinChallengeActive || !state.coinTargets?.length) return;
+  state.coinTargets.forEach(target => {
+    if (target.collected) return;
+    target.mesh.rotation.z += delta * 2.6;
+    target.mesh.rotation.y = Math.sin(now * 0.0018 + target.index) * 0.18;
+    target.mesh.position.y = target.y + Math.sin(now * 0.0024 + target.index * 0.8) * 0.07;
+    if (state.coinCollectionEnabled && planePosition.distanceTo(target.mesh.position) <= 0.92) {
+      target.collected = true;
+      target.mesh.visible = false;
+      onCoinCollected?.({ id: target.id, lane: target.lane, label: target.label });
+    }
+  });
 }
 
 function addLandingRecord(state) {
@@ -481,11 +532,18 @@ function makeEnvironment() {
   return environment;
 }
 
-function FlightScene({ settings, flightRequest, replayResult, onResult, onFlightState, onFlightEvent, onTelemetry, showForces, cameraMode, flightPaused, onPauseChange, stepRequest, sceneTheme, paperTone, replaySpeed, replaySeek }) {
+function FlightScene({ settings, flightRequest, replayResult, onResult, onFlightState, onFlightEvent, onTelemetry, showForces, cameraMode, flightPaused, onPauseChange, stepRequest, sceneTheme, paperTone, replaySpeed, replaySeek, coinChallengeActive, coinChallengeResetId, onCoinCollected, onCoinChallengeFlightComplete }) {
   const host = useRef(null);
   const sceneRef = useRef(null);
   const cameraModeRef = useRef(cameraMode);
   const replaySpeedRef = useRef(replaySpeed);
+  const onCoinCollectedRef = useRef(onCoinCollected);
+  const onCoinChallengeFlightCompleteRef = useRef(onCoinChallengeFlightComplete);
+
+  useEffect(() => {
+    onCoinCollectedRef.current = onCoinCollected;
+    onCoinChallengeFlightCompleteRef.current = onCoinChallengeFlightComplete;
+  }, [onCoinCollected, onCoinChallengeFlightComplete]);
 
   useEffect(() => {
     const el = host.current;
@@ -675,6 +733,7 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
       sceneTheme, flightSimulation: null,
       flightCount: 0, activeFlightId: 0, lastRecordedFlightId: -1,
       paused: false, stepRequestId: 0, pointerState, replaySeekRequest: replaySeek,
+      coinChallengeGroup: null, coinTargets: [], coinChallengeActive: false, coinCollectionEnabled: false,
       cameraGoal: camera.position.clone(), targetGoal: controls.target.clone(),
       cameraReturnToLaunch: false,
       isFlying: false, raf: 0, flightRaf: 0
@@ -726,6 +785,7 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
           state.impactRing.material.opacity = 0.55 * (1 - age / 1.15);
         }
       }
+      updateCoinChallenge(state, delta, now, state.plane.position, onCoinCollectedRef.current);
       if (sceneRef.current.cameraGoal && (cameraModeRef.current !== 'free' || sceneRef.current.cameraReturnToLaunch)) {
         camera.position.lerp(sceneRef.current.cameraGoal, 0.075);
         controls.target.lerp(sceneRef.current.targetGoal, 0.075);
@@ -776,6 +836,29 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
       el.removeChild(renderer.domElement);
     };
   }, []);
+
+  useEffect(() => {
+    const state = sceneRef.current;
+    if (!state) return;
+    if (state.coinChallengeGroup) {
+      state.scene.remove(state.coinChallengeGroup);
+      state.coinChallengeGroup.traverse(object => {
+        if (!object.isMesh) return;
+        object.geometry?.dispose();
+        if (Array.isArray(object.material)) object.material.forEach(material => material.dispose());
+        else object.material?.dispose();
+      });
+    }
+    state.coinChallengeGroup = null;
+    state.coinTargets = [];
+    state.coinChallengeActive = coinChallengeActive;
+    state.coinCollectionEnabled = false;
+    if (!coinChallengeActive) return;
+    const challenge = makeCoinChallengeGroup();
+    state.coinChallengeGroup = challenge.group;
+    state.coinTargets = challenge.targets;
+    state.scene.add(challenge.group);
+  }, [coinChallengeActive, coinChallengeResetId]);
 
   useEffect(() => {
     cameraModeRef.current = cameraMode;
@@ -942,10 +1025,12 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
       addLandingRecord(state);
       state.lastResult = result;
       state.isFlying = false;
+      state.coinCollectionEnabled = false;
       state.flightSimulation = null;
       state.forceGroup.visible = false;
       state.controls.enabled = cameraModeRef.current === 'overview' || cameraModeRef.current === 'free';
       onResult(result);
+      onCoinChallengeFlightCompleteRef.current?.(result);
       onFlightState(false);
       onPauseChange(false);
       onFlightEvent({ label: result.cause, detail: result.verdict, tone: result.cause === '穩定飛行' ? 'peak' : 'danger' });
@@ -963,6 +1048,7 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     const { plane, pathLine, pathMaterial, previousPathLine, previousPathMaterial,
       forceGroup, controls, cameraGoal, targetGoal } = state;
     state.controls = controls;
+    state.coinCollectionEnabled = !isReplay;
     cancelAnimationFrame(state.flightRaf);
     if (!isReplay && pathLine.geometry.getAttribute('position')) {
       previousPathLine.geometry.dispose();
@@ -1023,6 +1109,7 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
         else {
           onTelemetry({ ...makeTelemetry(result.points.at(-1)), progress: 1 });
           state.isFlying = false;
+          state.coinCollectionEnabled = false;
           forceGroup.visible = false;
           controls.enabled = cameraModeRef.current === 'overview' || cameraModeRef.current === 'free';
           onFlightState(false);
@@ -1093,6 +1180,7 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
           forceGroup.visible = false;
           controls.enabled = cameraModeRef.current === 'overview' || cameraModeRef.current === 'free';
           onResult(finalResult);
+          onCoinChallengeFlightCompleteRef.current?.(finalResult);
           onFlightState(false);
           onPauseChange(false);
           onFlightEvent({ label: finalResult.cause, detail: finalResult.verdict, tone: finalResult.cause === '穩定飛行' ? 'peak' : 'danger' });
@@ -1105,6 +1193,7 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     return () => {
       cancelAnimationFrame(state.flightRaf);
       state.isFlying = false;
+      state.coinCollectionEnabled = false;
       state.flightSimulation = null;
       state.forceGroup.visible = false;
       onFlightState(false);
@@ -1258,6 +1347,18 @@ function FlightChart({ result, previousResult }) {
   </div>;
 }
 
+function createCoinChallengeState() {
+  return {
+    active: false,
+    attempts: 0,
+    score: 0,
+    collectedIds: [],
+    currentFlightScore: 0,
+    lastFlightScore: 0,
+    finished: false
+  };
+}
+
 function App() {
   const [settings, setSettings] = useState({ goal: 'far', clipCount: 1, clipPosition: 22, clipPlacement: 'body', wingArea: DEFAULT_WING_AREA, throwAngle: 10, throwPower: 70, initialHeight: 1.35, wind: 0, windDirection: 'front', gustStrength: 0.35, turbulence: 0.2, gustDelay: 1.1, wingSoftness: 0.25, weather: 'clear' });
   const [flightRequest, setFlightRequest] = useState({ id: 0, mode: 'launch' });
@@ -1283,6 +1384,8 @@ function App() {
   const [replaySpeed, setReplaySpeed] = useState(1);
   const [replayProgress, setReplayProgress] = useState(0);
   const [replaySeek, setReplaySeek] = useState({ id: 0, progress: 0 });
+  const [coinChallenge, setCoinChallenge] = useState(createCoinChallengeState);
+  const [coinChallengeResetId, setCoinChallengeResetId] = useState(0);
   const isReplayPlaying = isAnimating && flightRequest.mode === 'replay';
 
   useEffect(() => {
@@ -1294,6 +1397,45 @@ function App() {
   const handleTelemetry = nextTelemetry => {
     setTelemetry(nextTelemetry);
     if (nextTelemetry.progress != null) setReplayProgress(nextTelemetry.progress);
+  };
+  const handleCoinCollected = coin => {
+    setCoinChallenge(current => {
+      if (!current.active || current.collectedIds.includes(coin.id)) return current;
+      return {
+        ...current,
+        score: current.score + 1,
+        currentFlightScore: current.currentFlightScore + 1,
+        collectedIds: [...current.collectedIds, coin.id]
+      };
+    });
+    setFlightEvent({ label: '吃到金幣', detail: `${coin.label} +1`, tone: 'peak' });
+  };
+  const handleCoinChallengeFlightComplete = () => {
+    setCoinChallenge(current => {
+      if (!current.active) return current;
+      const attempts = current.attempts + 1;
+      return {
+        ...current,
+        attempts,
+        lastFlightScore: current.currentFlightScore,
+        currentFlightScore: 0,
+        finished: attempts >= COIN_CHALLENGE_ATTEMPTS
+      };
+    });
+  };
+  const startCoinChallenge = () => {
+    if (isAnimating) return;
+    setCoinChallenge({ ...createCoinChallengeState(), active: true });
+    setCoinChallengeResetId(id => id + 1);
+    setResult(null);
+    setPreviousResult(null);
+    setPrediction(null);
+    setPredictionFeedback(null);
+    setPredictionSummary(null);
+    setReplayProgress(0);
+    setReplaySeek(current => ({ id: current.id + 1, progress: 0 }));
+    setFlightEvent({ label: '金幣挑戰開始', detail: '調整投擲角度與力道，三次內盡量吃到更多金幣。', tone: 'peak' });
+    setActiveStep('flight');
   };
   const update = (key, value) => {
     setSettings(current => ({ ...current, [key]: value }));
@@ -1325,7 +1467,7 @@ function App() {
   } : null;
 
   const handleResult = next => {
-    if (result) {
+    if (result && !coinChallenge.active) {
       setPreviousResult(result);
       const correct = prediction === 'farther'
         ? next.distance > result.distance + 0.01
@@ -1352,7 +1494,10 @@ function App() {
   };
 
   const launch = () => {
-    if (isAnimating || (result && !prediction)) return;
+    if (isAnimating || (coinChallenge.active ? coinChallenge.finished : Boolean(result && !prediction))) return;
+    if (coinChallenge.active) {
+      setCoinChallenge(current => ({ ...current, currentFlightScore: 0 }));
+    }
     setActiveStep('flight');
     setFlightRequest(current => ({ id: current.id + 1, mode: 'launch' }));
   };
@@ -1448,11 +1593,13 @@ function App() {
     setFlightRequest({ id: 0, mode: 'launch' });
     setFlightEvent(null);
     setAdvancedOpen(false);
+    setCoinChallenge(createCoinChallengeState());
+    setCoinChallengeResetId(id => id + 1);
   };
 
   return (
     <main className={`app-shell ${sceneTheme === 'dark' ? 'dark-theme' : ''} ${highContrast ? 'high-contrast' : ''} ${isAnimating ? 'is-flying' : ''}`}>
-      <FlightScene settings={settings} flightRequest={flightRequest} replayResult={result} onResult={handleResult} onFlightState={setIsAnimating} onFlightEvent={setFlightEvent} onTelemetry={handleTelemetry} showForces={showForces} cameraMode={cameraMode} flightPaused={flightPaused} onPauseChange={setFlightPaused} stepRequest={stepRequest} sceneTheme={sceneTheme} paperTone={paperTone} replaySpeed={replaySpeed} replaySeek={replaySeek} />
+      <FlightScene settings={settings} flightRequest={flightRequest} replayResult={result} onResult={handleResult} onFlightState={setIsAnimating} onFlightEvent={setFlightEvent} onTelemetry={handleTelemetry} showForces={showForces} cameraMode={cameraMode} flightPaused={flightPaused} onPauseChange={setFlightPaused} stepRequest={stepRequest} sceneTheme={sceneTheme} paperTone={paperTone} replaySpeed={replaySpeed} replaySeek={replaySeek} coinChallengeActive={coinChallenge.active} coinChallengeResetId={coinChallengeResetId} onCoinCollected={handleCoinCollected} onCoinChallengeFlightComplete={handleCoinChallengeFlightComplete} />
       <header className="topbar">
         <div className="brand"><Plane size={22} /><span><strong>紙飛機</strong><b>PHYSICS LAB</b></span></div>
         <div className="record">世界紀錄機型 · 教學模擬</div>
@@ -1525,6 +1672,30 @@ function App() {
           {result && !prediction ? <Info size={14} /> : <CheckCircle2 size={14} />}
           {result && !prediction ? '還差一步：選擇你的預測' : result ? '預測完成，準備比較下一次飛行' : '基本設定已就緒，可以建立基準試飛'}
         </p>
+
+        <section className={`setting-card coin-challenge-card ${coinChallenge.active ? 'active' : ''}`}>
+          <h2><Coins size={16} />三次投擲金幣挑戰</h2>
+          <p className="coin-challenge-intro">場景中有上下兩道金幣拋物線；調整投擲角度與力道，三次內吃到越多越好。</p>
+          <div className="coin-scoreboard" aria-label="金幣挑戰進度">
+            <div><span>吃到金幣</span><strong>{coinChallenge.score}<small> / {COIN_TARGETS.length}</small></strong></div>
+            <div><span>投擲次數</span><strong>{coinChallenge.attempts}<small> / {COIN_CHALLENGE_ATTEMPTS}</small></strong></div>
+            <div><span>上次吃到</span><strong>{coinChallenge.lastFlightScore}<small> 枚</small></strong></div>
+          </div>
+          <div className="coin-lane-summary">
+            <span><i className="coin-dot lower" />下方 {COIN_LANES[0].count} 枚</span>
+            <span><i className="coin-dot upper" />上方 {COIN_LANES[1].count} 枚</span>
+          </div>
+          <button className="coin-challenge-button" type="button" disabled={isAnimating} onClick={startCoinChallenge}>
+            {coinChallenge.active ? (coinChallenge.finished ? '再玩一次' : '重新開始挑戰') : '開始金幣挑戰'}
+          </button>
+          {coinChallenge.active && <p className="coin-challenge-status" role="status">
+            {coinChallenge.finished
+              ? `挑戰完成！你總共吃到 ${coinChallenge.score} / ${COIN_TARGETS.length} 枚金幣。`
+              : coinChallenge.attempts === 0
+                ? '挑戰已開始，先觀察上下兩道弧線的位置。'
+                : `還剩 ${COIN_CHALLENGE_ATTEMPTS - coinChallenge.attempts} 次投擲。`}
+          </p>}
+        </section>
 
         <section className="setting-card target-card">
           <h2><Crosshair size={16} />這次想做什麼實驗？</h2>
@@ -1638,7 +1809,7 @@ function App() {
       </aside>
 
       <div className="flight-actions" id="flight-step">
-        {result && <section className="prediction-section">
+        {result && !coinChallenge.active && <section className="prediction-section">
           <h2><Brain size={15} />先預測，再試飛</h2>
           {predictionSummary && <div className={`prediction-result ${predictionSummary.correct ? 'correct' : 'review'}`}>
             <div><small>你的預測</small><strong>{predictionSummary.expected}</strong></div>
@@ -1655,9 +1826,9 @@ function App() {
           </div>
           {predictionFeedback && <p className="prediction-feedback"><CheckCircle2 size={15} />{predictionFeedback}</p>}
         </section>}
-        <button className="launch" disabled={isAnimating || Boolean(result && !prediction)} onClick={launch}><Plane size={20} />{isAnimating ? '飛行中…' : result && !prediction ? '請先選擇預測' : result ? '再次試飛' : '開始試飛'}</button>
-        {result && <button className="replay" disabled={isAnimating} onClick={replay}><Rewind size={18} />慢動作重播</button>}
-        {result && <div className="replay-tools">
+        <button className="launch" disabled={isAnimating || (coinChallenge.active ? coinChallenge.finished : Boolean(result && !prediction))} onClick={launch}><Plane size={20} />{isAnimating ? '飛行中…' : coinChallenge.active ? (coinChallenge.finished ? '挑戰已完成' : `第 ${coinChallenge.attempts + 1} 次投擲`) : result && !prediction ? '請先選擇預測' : result ? '再次試飛' : '開始試飛'}</button>
+        {result && !coinChallenge.active && <button className="replay" disabled={isAnimating} onClick={replay}><Rewind size={18} />慢動作重播</button>}
+        {result && !coinChallenge.active && <div className="replay-tools">
           <div className="replay-speeds" role="group" aria-label="重播速度">{[0.5, 1, 2].map(speed => <button key={speed} className={replaySpeed === speed ? 'selected' : ''} onClick={() => setReplaySpeed(speed)}>{speed}×</button>)}</div>
           {isReplayPlaying && <label className="replay-timeline"><span>{`${(replayProgress * result.airtime).toFixed(1)}s`}</span><input aria-label="重播進度" type="range" min="0" max="1" step="0.01" value={replayProgress} onChange={event => seekReplay(Number(event.target.value))} /><span>{result.airtime.toFixed(1)}s</span></label>}
         </div>}
