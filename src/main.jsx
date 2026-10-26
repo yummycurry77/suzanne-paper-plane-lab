@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import * as THREE from 'three';
 import { createFlightPhysics } from './flightPhysics.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { Brain, CheckCircle2, CloudRain, Crosshair, Eye, EyeOff, Gauge, Info, Pause, Play, Plane, Rewind, RotateCcw, Scale, Sparkles, StepForward, Sun, Wind } from 'lucide-react';
+import { Brain, CheckCircle2, CloudRain, Crosshair, Eye, EyeOff, Gauge, Info, Pause, Play, Plane, Rewind, RotateCcw, Scale, StepForward, Sun, Wind } from 'lucide-react';
 import './styles.css';
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -15,6 +15,13 @@ const WING_AREA_OPTIONS = [
   { value: 0.024, label: '小型', area: '0.024 m²' },
   { value: DEFAULT_WING_AREA, label: '中型', area: '0.030 m²' },
   { value: 0.036, label: '大型', area: '0.036 m²' }
+];
+const EXPERIMENT_GOALS = [
+  { value: 'far', label: '飛得更遠' },
+  { value: 'high', label: '飛得更高' },
+  { value: 'airtime', label: '滯空更久' },
+  { value: 'wind', label: '測試抗風' },
+  { value: 'balance', label: '比較配重' }
 ];
 const clipMultiplier = placement => placement === 'both' ? 2 : 1;
 
@@ -146,6 +153,57 @@ function makeDistanceMarker(distance) {
   label.position.y = 1.65;
   marker.add(pole, label);
   return marker;
+}
+
+function addLandingRecord(state) {
+  if (state.lastRecordedFlightId === state.activeFlightId) return;
+  state.lastRecordedFlightId = state.activeFlightId;
+  const attempt = ++state.flightCount;
+  const ghost = state.plane.clone(true);
+  ghost.position.y = Math.max(0.12, ghost.position.y + 0.12);
+  ghost.traverse(object => {
+    if (!object.isMesh) return;
+    object.castShadow = false;
+    object.receiveShadow = false;
+    const makeGhostMaterial = material => {
+      const ghostMaterial = material.clone();
+      ghostMaterial.transparent = true;
+      ghostMaterial.opacity = 0.28;
+      ghostMaterial.depthWrite = false;
+      if (ghostMaterial.color) ghostMaterial.color.set('#77a890');
+      return ghostMaterial;
+    };
+    object.material = Array.isArray(object.material)
+      ? object.material.map(makeGhostMaterial)
+      : makeGhostMaterial(object.material);
+    object.renderOrder = 2;
+  });
+  state.scene.add(ghost);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 320;
+  canvas.height = 112;
+  const context = canvas.getContext('2d');
+  context.fillStyle = 'rgba(248,252,249,0.96)';
+  context.roundRect(8, 8, 304, 96, 18);
+  context.fill();
+  context.strokeStyle = '#43856a';
+  context.lineWidth = 5;
+  context.stroke();
+  context.fillStyle = '#173d32';
+  context.font = '700 48px sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(`第 ${attempt} 次投擲`, 160, 58);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+  label.scale.set(3.2, 1.12, 1);
+  label.position.copy(state.plane.position);
+  label.position.y += 2.1 + ((attempt - 1) % 3) * 0.42;
+  label.position.x += ((attempt - 1) % 3 - 1) * 0.45;
+  label.renderOrder = 10;
+  state.scene.add(label);
 }
 
 function makeGrassTexture(renderer) {
@@ -308,15 +366,15 @@ function updateRainStreaks(rain, weather, wind, windDirection, delta) {
 function makeEnvironment() {
   const environment = new THREE.Group();
   const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(90, 4.2),
+    new THREE.PlaneGeometry(95, 4.2),
     new THREE.MeshStandardMaterial({ color: '#7d8987', roughness: 1 })
   );
   road.rotation.x = -Math.PI / 2;
-  road.position.set(32, 0.012, 12);
+  road.position.set(40, 0.012, 12);
   environment.add(road);
   [-1.45, 1.45].forEach(z => {
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(90, 0.025, 0.09), new THREE.MeshStandardMaterial({ color: '#eef1dc' }));
-    stripe.position.set(32, 0.035, 12 + z);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(95, 0.025, 0.09), new THREE.MeshStandardMaterial({ color: '#eef1dc' }));
+    stripe.position.set(40, 0.035, 12 + z);
     environment.add(stripe);
   });
 
@@ -326,11 +384,11 @@ function makeEnvironment() {
   environment.add(car);
 
   const rearRoad = new THREE.Mesh(
-    new THREE.PlaneGeometry(90, 3.6),
+    new THREE.PlaneGeometry(95, 3.6),
     new THREE.MeshStandardMaterial({ color: '#899391', roughness: 1 })
   );
   rearRoad.rotation.x = -Math.PI / 2;
-  rearRoad.position.set(32, 0.01, -17.5);
+  rearRoad.position.set(40, 0.01, -17.5);
   environment.add(rearRoad);
   const rearCar = makeCar('#3978b8');
   rearCar.scale.setScalar(0.78);
@@ -346,25 +404,28 @@ function makeEnvironment() {
   lake.position.set(27 * WORLD_X_SCALE, 0.018, -12);
   environment.add(lake);
 
-  const treeData = [
-    [4, -9, 3.8, '#3f8b59'], [8, -12, 4.8, '#347951'], [12, -8.5, 4.2, '#4b9660'],
-    [18, -11, 5.1, '#367b4f'], [23, -8.8, 4.0, '#4f9560'], [29, -12, 5.4, '#35764d'],
-    [35, -9, 4.7, '#438b58']
-  ];
+  const treeColors = ['#3f8b59', '#347951', '#4b9660', '#367b4f', '#4f9560', '#35764d', '#438b58'];
+  const treeData = Array.from({ length: 19 }, (_, index) => {
+    const meters = 5 + index * 3.5;
+    const side = index % 2 ? -1 : 1;
+    const z = side * (8.5 + (index % 3) * 1.7);
+    const height = 3.8 + (index % 5) * 0.38;
+    return [meters, z, height, treeColors[index % treeColors.length]];
+  });
   treeData.forEach(([meters, z, height, color]) => {
     const tree = makeTree(height, color);
     tree.position.set(meters * WORLD_X_SCALE, 0, z);
     environment.add(tree);
   });
 
-  [5, 10, 15, 20, 25, 30].forEach((distance, index) => {
+  Array.from({ length: 14 }, (_, index) => (index + 1) * 5).forEach((distance, index) => {
     const marker = makeDistanceMarker(distance);
     marker.position.set(distance * WORLD_X_SCALE, 0, index % 2 ? -4.3 : -3.9);
     environment.add(marker);
   });
 
   const grassMaterial = new THREE.MeshStandardMaterial({ color: '#5f9d62', roughness: 1 });
-  for (let index = 0; index < 24; index += 1) {
+  for (let index = 0; index < 40; index += 1) {
     const grass = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.55 + (index % 3) * 0.12, 5), grassMaterial);
     const x = 2 + index * 2.15;
     grass.position.set(x, 0.28, index % 2 ? 4.3 + (index % 4) : -4.5 - (index % 3));
@@ -372,7 +433,7 @@ function makeEnvironment() {
   }
 
   const flowerColors = ['#f3cf46', '#e96b68', '#f3f1ee'];
-  for (let index = 0; index < 12; index += 1) {
+  for (let index = 0; index < 14; index += 1) {
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.55, 6), grassMaterial);
     stem.position.y = 0.275;
     const bloom = new THREE.Mesh(
@@ -382,7 +443,7 @@ function makeEnvironment() {
     bloom.position.y = 0.58;
     const flower = new THREE.Group();
     flower.add(stem, bloom);
-    flower.position.set(3 + index * 3.1, 0, index % 2 ? 4.8 : -5.2);
+    flower.position.set(3 + index * 6.1, 0, index % 2 ? 4.8 : -5.2);
     environment.add(flower);
   }
 
@@ -401,21 +462,97 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     const el = host.current;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#dfeee8');
-    scene.fog = new THREE.Fog('#dfeee8', 45, 120);
+    scene.fog = new THREE.Fog('#dfeee8', 100, 130);
     const camera = new THREE.PerspectiveCamera(42, el.clientWidth / el.clientHeight, 0.1, 180);
     camera.position.set(14, 9, 17);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(el.clientWidth < 760 ? 1 : Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(el.clientWidth, el.clientHeight);
     renderer.shadowMap.enabled = el.clientWidth >= 760;
+    renderer.domElement.tabIndex = 0;
+    renderer.domElement.setAttribute('aria-label', '3D 紙飛機畫面；環視模式可使用 WASD 移動鏡頭');
     el.appendChild(renderer.domElement);
+
+    const heldKeys = new Set();
+    const handleKeyDown = event => {
+      const key = event.key.toLowerCase();
+      if (!['w', 'a', 's', 'd'].includes(key)) return;
+      event.preventDefault();
+      heldKeys.add(key);
+    };
+    const handleKeyUp = event => heldKeys.delete(event.key.toLowerCase());
+    const clearHeldKeys = () => heldKeys.clear();
+    const focusCanvas = () => renderer.domElement.focus({ preventScroll: true });
+    renderer.domElement.addEventListener('keydown', handleKeyDown);
+    renderer.domElement.addEventListener('keyup', handleKeyUp);
+    renderer.domElement.addEventListener('blur', clearHeldKeys);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.enablePan = false;
-    controls.minDistance = 8;
-    controls.maxDistance = 34;
+    controls.minDistance = 2.5;
+    controls.maxDistance = 48;
+    controls.minPolarAngle = 0.01;
+    controls.maxPolarAngle = Math.PI - 0.01;
+    controls.rotateSpeed = 0.8;
     controls.target.set(2, 2.5, 0);
+    const pointerState = { last: null, activeTouchId: null, rightButtonDown: false };
+    const handlePointerMove = event => {
+      if (cameraModeRef.current !== 'free') {
+        pointerState.last = null;
+        return;
+      }
+      const isMouse = event.pointerType === 'mouse' && pointerState.rightButtonDown;
+      const isActiveTouch = event.pointerType === 'touch' && event.pointerId === pointerState.activeTouchId;
+      if (!isMouse && !isActiveTouch) {
+        pointerState.last = null;
+        return;
+      }
+      if (!pointerState.last || pointerState.last.id !== event.pointerId) {
+        pointerState.last = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        return;
+      }
+      const deltaX = event.clientX - pointerState.last.x;
+      const deltaY = event.clientY - pointerState.last.y;
+      pointerState.last = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      const offset = camera.position.clone().sub(controls.target);
+      const spherical = new THREE.Spherical().setFromVector3(offset);
+      const sensitivity = event.pointerType === 'touch' ? 0.003 : 0.002;
+      spherical.theta -= deltaX * sensitivity;
+      spherical.phi = THREE.MathUtils.clamp(spherical.phi - deltaY * sensitivity, controls.minPolarAngle + 0.01, controls.maxPolarAngle - 0.01);
+      camera.position.copy(controls.target).add(offset.setFromSpherical(spherical));
+      camera.lookAt(controls.target);
+    };
+    const handlePointerDown = event => {
+      focusCanvas();
+      if (event.pointerType === 'mouse' && event.button === 2) {
+        pointerState.rightButtonDown = true;
+        pointerState.last = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        event.preventDefault();
+      }
+      if (event.pointerType === 'touch') {
+        pointerState.activeTouchId = event.pointerId;
+        pointerState.last = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      }
+    };
+    const handlePointerUp = event => {
+      if (event.pointerType === 'mouse' && event.button === 2) {
+        pointerState.rightButtonDown = false;
+        pointerState.last = null;
+      }
+      if (event.pointerId === pointerState.activeTouchId) pointerState.activeTouchId = null;
+      if (event.pointerType === 'touch') pointerState.last = null;
+    };
+    const handleContextMenu = event => event.preventDefault();
+    const handlePointerLeave = event => {
+      if (event.pointerType === 'mouse' || event.pointerType === 'touch') pointerState.last = null;
+      if (event.pointerType === 'mouse') pointerState.rightButtonDown = false;
+    };
+    renderer.domElement.addEventListener('pointermove', handlePointerMove);
+    renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+    renderer.domElement.addEventListener('pointerup', handlePointerUp);
+    renderer.domElement.addEventListener('pointerleave', handlePointerLeave);
+    renderer.domElement.addEventListener('contextmenu', handleContextMenu);
 
     const hemisphere = new THREE.HemisphereLight('#ffffff', '#789187', 2.3);
     scene.add(hemisphere);
@@ -425,17 +562,17 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     scene.add(sun);
 
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(150, 64),
+      new THREE.PlaneGeometry(100, 70),
       new THREE.MeshStandardMaterial({ map: makeGrassTexture(renderer), color: '#e5f0df', roughness: 1 })
     );
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.05;
+    ground.position.set(40, -0.05, 0);
     ground.receiveShadow = true;
     scene.add(ground);
 
-    const grid = new THREE.GridHelper(60, 60, '#6f9683', '#86ae98');
+    const grid = new THREE.GridHelper(90, 45, '#6f9683', '#86ae98');
     grid.position.y = 0.005;
-    grid.position.x = 20;
+    grid.position.x = 43.75;
     grid.material.transparent = true;
     grid.material.opacity = 0.28;
     scene.add(grid);
@@ -449,6 +586,16 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     plane.position.set(0, 1.35 * WORLD_Y_SCALE, 0);
     plane.traverse(obj => { if (obj.isMesh) obj.castShadow = true; });
     scene.add(plane);
+
+    const launchGuide = new THREE.ArrowHelper(
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(),
+      2.5,
+      '#e54f39',
+      0.42,
+      0.22
+    );
+    scene.add(launchGuide);
 
     const clips = new THREE.Group();
     plane.userData.paperModel.add(clips);
@@ -480,9 +627,11 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
       scene, camera, renderer, controls, plane, clips, pathLine, pathMaterial,
       previousPathLine, previousPathMaterial, forceGroup, forceArrows,
       windStreaks, rainStreaks, windSpeed: 0, windDirection: 'front', weather: 'clear',
-      hemisphere, sun, ground, trees, wingFlexGroups, flightSimulation: null,
-      paused: false, stepRequestId: 0,
+      hemisphere, sun, ground, trees, wingFlexGroups, launchGuide, flightSimulation: null,
+      flightCount: 0, activeFlightId: 0, lastRecordedFlightId: -1,
+      paused: false, stepRequestId: 0, pointerState,
       cameraGoal: camera.position.clone(), targetGoal: controls.target.clone(),
+      cameraReturnToLaunch: false,
       isFlying: false, raf: 0, flightRaf: 0
     };
 
@@ -519,11 +668,35 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
         const sway = windLean + Math.sin(now * 0.004 + tree.userData.swayPhase + index) * swayStrength;
         tree.rotation.z = THREE.MathUtils.lerp(tree.rotation.z, sway, 0.08);
       });
-      if (sceneRef.current.cameraGoal) {
+      if (sceneRef.current.cameraGoal && (cameraModeRef.current !== 'free' || sceneRef.current.cameraReturnToLaunch)) {
         camera.position.lerp(sceneRef.current.cameraGoal, 0.075);
         controls.target.lerp(sceneRef.current.targetGoal, 0.075);
+        if (sceneRef.current.cameraReturnToLaunch
+          && camera.position.distanceTo(sceneRef.current.cameraGoal) < 0.08
+          && controls.target.distanceTo(sceneRef.current.targetGoal) < 0.08) {
+          sceneRef.current.cameraReturnToLaunch = false;
+        }
       }
       controls.update();
+      if (cameraModeRef.current === 'free' && heldKeys.size > 0) {
+        const forward = controls.target.clone().sub(camera.position);
+        forward.y = 0;
+        if (forward.lengthSq() < 0.0001) forward.set(0, 0, -1);
+        else forward.normalize();
+        const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+        const movement = new THREE.Vector3();
+        if (heldKeys.has('w')) movement.add(forward);
+        if (heldKeys.has('s')) movement.sub(forward);
+        if (heldKeys.has('d')) movement.add(right);
+        if (heldKeys.has('a')) movement.sub(right);
+        if (movement.lengthSq() > 0) {
+          movement.normalize().multiplyScalar(Math.max(4, camera.position.distanceTo(controls.target) * 0.7) * delta);
+          camera.position.add(movement);
+          controls.target.add(movement);
+          sceneRef.current.cameraGoal.add(movement);
+          sceneRef.current.targetGoal.add(movement);
+        }
+      }
       renderer.render(scene, camera);
       sceneRef.current.raf = requestAnimationFrame(animate);
     };
@@ -532,6 +705,14 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
       observer.disconnect();
       cancelAnimationFrame(sceneRef.current?.raf);
       cancelAnimationFrame(sceneRef.current?.flightRaf);
+      renderer.domElement.removeEventListener('pointermove', handlePointerMove);
+      renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
+      renderer.domElement.removeEventListener('pointerup', handlePointerUp);
+      renderer.domElement.removeEventListener('pointerleave', handlePointerLeave);
+      renderer.domElement.removeEventListener('contextmenu', handleContextMenu);
+      renderer.domElement.removeEventListener('keydown', handleKeyDown);
+      renderer.domElement.removeEventListener('keyup', handleKeyUp);
+      renderer.domElement.removeEventListener('blur', clearHeldKeys);
       controls.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
@@ -540,15 +721,29 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
 
   useEffect(() => {
     cameraModeRef.current = cameraMode;
-    if (!sceneRef.current || sceneRef.current.isFlying) return;
+    if (!sceneRef.current) return;
+    const state = sceneRef.current;
+    if (state.isFlying) {
+      state.controls.enabled = cameraMode === 'free';
+      state.controls.enableRotate = cameraMode !== 'free';
+      state.renderer.domElement.style.cursor = cameraMode === 'free' ? 'crosshair' : 'auto';
+      if (cameraMode !== 'free') state.pointerState.last = null;
+      return;
+    }
     const { cameraGoal, targetGoal, controls } = sceneRef.current;
-    controls.enabled = cameraMode === 'overview';
+    controls.enabled = cameraMode === 'overview' || cameraMode === 'free';
+    controls.enableRotate = cameraMode !== 'free';
+    state.renderer.domElement.style.cursor = cameraMode === 'free' ? 'crosshair' : 'auto';
+    if (cameraMode !== 'free') state.pointerState.last = null;
     if (cameraMode === 'side') {
       cameraGoal.set(7, 6.5, 22);
       targetGoal.set(4, 2, 0);
     } else if (cameraMode === 'follow') {
       cameraGoal.set(-4, 4.2, 8);
       targetGoal.set(2, 1.5, 0);
+    } else if (cameraMode === 'free') {
+      cameraGoal.set(0, 4.5, 9);
+      targetGoal.set(0, 0.55, 0);
     } else {
       cameraGoal.set(11, 11, 22);
       targetGoal.set(6, 1.8, 0);
@@ -564,6 +759,34 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     const scale = Math.sqrt((settings.wingArea ?? DEFAULT_WING_AREA) / DEFAULT_WING_AREA);
     sceneRef.current.plane.userData.wingGroup.scale.setScalar(scale);
   }, [settings.wingArea]);
+
+  useEffect(() => {
+    const state = sceneRef.current;
+    if (!state || state.isFlying) return;
+
+    const { plane, launchGuide, camera, controls, cameraGoal, targetGoal, wingFlexGroups } = state;
+    const launchPosition = new THREE.Vector3(0, (settings.initialHeight ?? 1.35) * WORLD_Y_SCALE, 0);
+    const cameraOffset = camera.position.clone().sub(controls.target);
+    plane.position.copy(launchPosition);
+    plane.rotation.set(0, 0, THREE.MathUtils.degToRad(settings.throwAngle ?? 10));
+    wingFlexGroups.left.rotation.z = 0;
+    wingFlexGroups.right.rotation.z = 0;
+
+    targetGoal.copy(launchPosition).add(new THREE.Vector3(0, 0.35, 0));
+    cameraGoal.copy(targetGoal).add(cameraOffset);
+    state.cameraReturnToLaunch = true;
+
+    const launchDirection = new THREE.Vector3(
+      Math.cos(THREE.MathUtils.degToRad(settings.throwAngle ?? 10)),
+      Math.sin(THREE.MathUtils.degToRad(settings.throwAngle ?? 10)),
+      0
+    );
+    const previewSpeed = 7 + (settings.throwPower ?? 70) * 0.14;
+    launchGuide.position.copy(launchPosition).addScaledVector(launchDirection, 1.2);
+    launchGuide.setDirection(launchDirection);
+    launchGuide.setLength(1.2 + previewSpeed * 0.19, 0.42, 0.22);
+    launchGuide.visible = true;
+  }, [settings]);
 
   useEffect(() => {
     if (sceneRef.current) {
@@ -632,11 +855,12 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     }
     if (state.flightSimulation.done) {
       const result = state.flightSimulation.finish();
+      addLandingRecord(state);
       state.lastResult = result;
       state.isFlying = false;
       state.flightSimulation = null;
       state.forceGroup.visible = false;
-      state.controls.enabled = cameraModeRef.current === 'overview';
+      state.controls.enabled = cameraModeRef.current === 'overview' || cameraModeRef.current === 'free';
       onResult(result);
       onFlightState(false);
       onPauseChange(false);
@@ -669,9 +893,10 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     pathLine.geometry.setDrawRange(0, 1);
     pathMaterial.opacity = 0.8;
     forceGroup.visible = showForces;
+    state.launchGuide.visible = false;
     state.isFlying = true;
     state.paused = false;
-    controls.enabled = false;
+    controls.enabled = cameraModeRef.current === 'free';
     state.lastTelemetryAt = 0;
     if (isReplay) {
       const coords = result.points.map(point => new THREE.Vector3(point.x * WORLD_X_SCALE, point.y * WORLD_Y_SCALE, point.z * WORLD_Z_SCALE));
@@ -701,13 +926,14 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
         else {
           state.isFlying = false;
           forceGroup.visible = false;
-          controls.enabled = cameraModeRef.current === 'overview';
+          controls.enabled = cameraModeRef.current === 'overview' || cameraModeRef.current === 'free';
           onFlightState(false);
           onFlightEvent(null);
         }
       };
       state.flightRaf = requestAnimationFrame(replayStep);
     } else {
+      state.activeFlightId = flightRequest.id;
       const simulation = createFlightPhysics(settings, 1337);
       state.flightSimulation = simulation;
       state.lastSeenEventIndex = 0;
@@ -738,17 +964,18 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
         } else if (cameraModeRef.current === 'side') {
           cameraGoal.set(plane.position.x + 8, Math.max(5.5, plane.position.y + 3.5), Math.max(24, plane.position.x * 1.25));
           targetGoal.set(plane.position.x + 1.5, Math.max(1.5, plane.position.y * 0.42), 0);
-        } else {
+        } else if (cameraModeRef.current === 'overview') {
           cameraGoal.set(Math.max(11, plane.position.x * 0.55), Math.max(10, plane.position.y + 7), Math.max(19, plane.position.x * 0.8));
           targetGoal.set(plane.position.x * 0.5, Math.max(1.2, plane.position.y * 0.35), 0);
         }
         if (simulation.done) {
           const finalResult = simulation.finish();
+          addLandingRecord(state);
           state.lastResult = finalResult;
           state.flightSimulation = null;
           state.isFlying = false;
           forceGroup.visible = false;
-          controls.enabled = cameraModeRef.current === 'overview';
+          controls.enabled = cameraModeRef.current === 'overview' || cameraModeRef.current === 'free';
           onResult(finalResult);
           onFlightState(false);
           onPauseChange(false);
@@ -844,32 +1071,45 @@ function Slider({ label, value, min, max, step = 1, unit, onChange }) {
 }
 
 function App() {
-  const [settings, setSettings] = useState({ goal: 'far', clipCount: 1, clipPosition: 22, clipPlacement: 'body', wingArea: DEFAULT_WING_AREA, throwAngle: 10, throwPower: 55, wind: 0, windDirection: 'front', gustStrength: 0.35, turbulence: 0.2, gustDelay: 1.1, wingSoftness: 0.25, weather: 'clear' });
+  const [settings, setSettings] = useState({ goal: 'far', clipCount: 1, clipPosition: 22, clipPlacement: 'body', wingArea: DEFAULT_WING_AREA, throwAngle: 10, throwPower: 70, initialHeight: 1.35, wind: 0, windDirection: 'front', gustStrength: 0.35, turbulence: 0.2, gustDelay: 1.1, wingSoftness: 0.25, weather: 'clear' });
   const [flightRequest, setFlightRequest] = useState({ id: 0, mode: 'launch' });
   const [result, setResult] = useState(null);
   const [previousResult, setPreviousResult] = useState(null);
   const [prediction, setPrediction] = useState(null);
   const [predictionFeedback, setPredictionFeedback] = useState(null);
   const [showForces, setShowForces] = useState(true);
-  const [cameraMode, setCameraMode] = useState('side');
+  const [cameraMode, setCameraMode] = useState('free');
   const [isAnimating, setIsAnimating] = useState(false);
   const [flightEvent, setFlightEvent] = useState(null);
   const [telemetry, setTelemetry] = useState(null);
   const [flightPaused, setFlightPaused] = useState(false);
   const [stepRequest, setStepRequest] = useState({ id: 0 });
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [activeScenario, setActiveScenario] = useState(null);
   const update = (key, value) => {
     setSettings(current => ({ ...current, [key]: value }));
+    if (['wind', 'windDirection', 'weather', 'gustStrength', 'turbulence', 'clipPlacement', 'clipCount', 'clipPosition'].includes(key)) {
+      setActiveScenario(null);
+    }
     setPrediction(null);
     setPredictionFeedback(null);
   };
   const liveCg = getCg(settings);
+  const liveStability = clamp(1 - Math.abs(liveCg - 30) / 24, 0.35, 1);
   const cgText = `${liveCg.toFixed(0)}%`;
-  const score = useMemo(() => result ? (settings.goal === 'far' ? result.distance : result.peak) : null, [result, settings.goal]);
+  const score = useMemo(() => {
+    if (!result) return null;
+    if (settings.goal === 'far') return { label: '飛行距離', value: result.distance, unit: 'm' };
+    if (settings.goal === 'high') return { label: '最高高度', value: result.peak, unit: 'm' };
+    if (settings.goal === 'airtime') return { label: '滯空時間', value: result.airtime, unit: 's' };
+    return { label: '落點側偏', value: Math.abs(result.deviation), unit: 'm' };
+  }, [result, settings.goal]);
   const comparison = result && previousResult ? {
     distance: result.distance - previousResult.distance,
     peak: result.peak - previousResult.peak,
     airtime: result.airtime - previousResult.airtime,
-    deviation: Math.abs(result.deviation) - Math.abs(previousResult.deviation)
+    deviation: Math.abs(result.deviation) - Math.abs(previousResult.deviation),
+    stability: result.stability - previousResult.stability
   } : null;
 
   const handleResult = next => {
@@ -879,7 +1119,9 @@ function App() {
         ? next.distance > result.distance + 0.01
         : prediction === 'higher'
           ? next.peak > result.peak + 0.01
-          : next.airtime > result.airtime + 0.01;
+          : prediction === 'lessDeviation'
+            ? Math.abs(next.deviation) < Math.abs(result.deviation) - 0.01
+            : next.airtime > result.airtime + 0.01;
       setPredictionFeedback(correct ? '預測正確！你找到了參數與飛行的關係。' : '結果和預測不同，觀察力量箭頭找找原因。');
       setPrediction(null);
     }
@@ -897,6 +1139,7 @@ function App() {
   };
 
   const setWindDirection = windDirection => {
+    setActiveScenario(null);
     setSettings(current => ({
       ...current,
       windDirection,
@@ -907,11 +1150,28 @@ function App() {
   };
 
   const setWeatherMode = weather => {
+    setActiveScenario(null);
     setSettings(current => ({
       ...current,
       weather,
       wind: weather === 'typhoon' ? 10 : weather === 'clear' ? 0 : current.wind
     }));
+    setPrediction(null);
+    setPredictionFeedback(null);
+  };
+
+  const applyScenario = scenario => {
+    const scenarios = {
+      baseline: { weather: 'clear', windDirection: 'front', wind: 0, gustStrength: 0.15, turbulence: 0.1, clipPlacement: 'body', clipCount: 1, clipPosition: 22 },
+      leftWind: { weather: 'clear', windDirection: 'left', wind: 6, gustStrength: 0.35, turbulence: 0.25 },
+      rightWind: { weather: 'clear', windDirection: 'right', wind: 6, gustStrength: 0.35, turbulence: 0.25 },
+      gust: { weather: 'clear', windDirection: 'front', wind: 6, gustStrength: 0.85, turbulence: 0.65 },
+      typhoon: { weather: 'typhoon', windDirection: 'left', wind: 10, gustStrength: 0.8, turbulence: 0.9 },
+      noseHeavy: { weather: 'clear', windDirection: 'front', wind: 0, clipPlacement: 'body', clipCount: 2, clipPosition: 5 },
+      leftHeavy: { weather: 'clear', windDirection: 'front', wind: 0, clipPlacement: 'left', clipCount: 2 }
+    };
+    setActiveScenario(scenario);
+    setSettings(current => ({ ...current, ...scenarios[scenario] }));
     setPrediction(null);
     setPredictionFeedback(null);
   };
@@ -923,17 +1183,19 @@ function App() {
   };
 
   const reset = () => {
-    setSettings({ goal: 'far', clipCount: 1, clipPosition: 22, clipPlacement: 'body', wingArea: DEFAULT_WING_AREA, throwAngle: 10, throwPower: 55, wind: 0, windDirection: 'front', gustStrength: 0.35, turbulence: 0.2, gustDelay: 1.1, wingSoftness: 0.25, weather: 'clear' });
+    setActiveScenario(null);
+    setSettings({ goal: 'far', clipCount: 1, clipPosition: 22, clipPlacement: 'body', wingArea: DEFAULT_WING_AREA, throwAngle: 10, throwPower: 70, initialHeight: 1.35, wind: 0, windDirection: 'front', gustStrength: 0.35, turbulence: 0.2, gustDelay: 1.1, wingSoftness: 0.25, weather: 'clear' });
     setResult(null);
     setPreviousResult(null);
     setPrediction(null);
     setPredictionFeedback(null);
-    setCameraMode('side');
+    setCameraMode('free');
     setIsAnimating(false);
     setFlightPaused(false);
     setTelemetry(null);
     setFlightRequest({ id: 0, mode: 'launch' });
     setFlightEvent(null);
+    setAdvancedOpen(false);
   };
 
   return (
@@ -959,28 +1221,32 @@ function App() {
       </div>}
 
       <div className="view-modes" aria-label="觀看模式">
-        <button className={cameraMode === 'side' ? 'active' : ''} onClick={() => setCameraMode('side')}>側視</button>
-        <button className={cameraMode === 'follow' ? 'active' : ''} onClick={() => setCameraMode('follow')}>跟隨</button>
-        <button className={cameraMode === 'overview' ? 'active' : ''} onClick={() => setCameraMode('overview')}>全景</button>
+        <button className={cameraMode === 'side' ? 'active' : ''} aria-pressed={cameraMode === 'side'} onClick={() => setCameraMode('side')}>側視</button>
+        <button className={cameraMode === 'follow' ? 'active' : ''} aria-pressed={cameraMode === 'follow'} onClick={() => setCameraMode('follow')}>跟隨</button>
+        <button className={cameraMode === 'overview' ? 'active' : ''} aria-pressed={cameraMode === 'overview'} onClick={() => setCameraMode('overview')}>全景</button>
+        <button className={cameraMode === 'free' ? 'active' : ''} aria-pressed={cameraMode === 'free'} onClick={() => setCameraMode('free')}>環視</button>
       </div>
+      {cameraMode === 'free' && <div className="view-hint" role="status">按住滑鼠右鍵移動旋轉・滾輪縮放・點畫面後按 WASD 移動</div>}
 
       {flightEvent && <div className={`flight-event ${flightEvent.tone}`} role="status">
         <strong>{flightEvent.label}</strong><span>{flightEvent.detail}</span>
       </div>}
 
-      <aside className={`control-panel ${isAnimating ? 'is-flying' : ''}`} aria-busy={isAnimating}>
+      <aside className={`control-panel ${isAnimating ? 'is-flying' : ''} ${result ? 'has-result' : ''}`} aria-busy={isAnimating}>
         <div className="panel-head">
           <div><small>任務 01</small><h1>調整 Suzanne</h1></div>
           <Info size={19} />
         </div>
 
-        <div className="segmented" aria-label="飛行目標">
-          <button className={settings.goal === 'far' ? 'active' : ''} onClick={() => update('goal', 'far')}><Crosshair size={16} />飛更遠</button>
-          <button className={settings.goal === 'high' ? 'active' : ''} onClick={() => update('goal', 'high')}><Sparkles size={16} />飛更高</button>
-        </div>
+        <section className="setting-card target-card">
+          <h2>這次想做什麼實驗？</h2>
+          <div className="goal-options" role="group" aria-label="實驗目標">
+            {EXPERIMENT_GOALS.map(goal => <button key={goal.value} className={settings.goal === goal.value ? 'selected' : ''} aria-pressed={settings.goal === goal.value} onClick={() => update('goal', goal.value)}>{goal.label}</button>)}
+          </div>
+        </section>
 
-        <section>
-          <h2>迴紋針配重</h2>
+        <section className={`setting-card plane-card ${settings.goal === 'balance' ? 'recommended' : ''}`}>
+          <h2>紙飛機</h2>
           <div className="placement-options" aria-label="迴紋針放置區域">
             <button className={settings.clipPlacement === 'body' ? 'selected' : ''} onClick={() => update('clipPlacement', 'body')}>機身</button>
             <button className={settings.clipPlacement === 'left' ? 'selected' : ''} onClick={() => update('clipPlacement', 'left')}>左翼</button>
@@ -988,7 +1254,7 @@ function App() {
             <button className={settings.clipPlacement === 'both' ? 'selected' : ''} onClick={() => update('clipPlacement', 'both')}>左右對稱</button>
           </div>
           <div className="stepper-row"><span>{settings.clipPlacement === 'both' ? '每側數量' : '數量'}</span><div className="stepper"><button onClick={() => update('clipCount', clamp(settings.clipCount - 1, 0, 3))}>−</button><strong>{settings.clipCount}</strong><button onClick={() => update('clipCount', clamp(settings.clipCount + 1, 0, 3))}>＋</button></div></div>
-          <Slider label="位置" value={settings.clipPosition} min={5} max={75} unit="%" onChange={v => update('clipPosition', v)} />
+          <div className="position-label">拖曳紙飛機上的標記調整配重位置</div>
           <div className="plane-map"><span className="nose">機頭</span><div
             className="mini-plane"
             role="slider"
@@ -1009,16 +1275,10 @@ function App() {
             <i className="clip-marker" style={{ left: `${((settings.clipPosition - 5) / 70) * 100}%` }} />
             <i className={`cg-marker ${liveCg < 23 || liveCg > 36 ? 'warning' : ''}`} style={{ left: `${liveCg}%` }} />
           </div><span>機尾</span></div>
-          <div className={`cg-status ${liveCg < 23 || liveCg > 36 ? 'warning' : ''}`}>
-            <Scale size={15} /><span>重心 {liveCg.toFixed(0)}%</span><strong>{liveCg < 23 ? '機頭偏重' : liveCg > 36 ? '機尾偏重' : '穩定區'}</strong>
+          <div className={`status-summary ${liveCg < 23 || liveCg > 36 || settings.clipPlacement === 'left' || settings.clipPlacement === 'right' ? 'warning' : ''}`}>
+            <Scale size={15} /><span>目前狀態：重心 {cgText}、{liveCg < 23 ? '機頭偏重' : liveCg > 36 ? '機尾偏重' : '重心穩定'}、{settings.clipPlacement === 'left' ? '左側較重' : settings.clipPlacement === 'right' ? '右側較重' : '左右平衡'}、穩定度 {Math.round(liveStability * 100)}%</span>
           </div>
-          <div className={`balance-status ${settings.clipPlacement === 'left' || settings.clipPlacement === 'right' ? 'warning' : ''}`}>
-            <Crosshair size={15} /><span>左右平衡</span><strong>{settings.clipPlacement === 'left' ? '左側較重' : settings.clipPlacement === 'right' ? '右側較重' : '平衡'}</strong>
-          </div>
-        </section>
-
-        <section>
-          <h2>紙飛機大小</h2>
+          <h3 className="card-subheading">翼面積</h3>
           <div className="wing-size-options" role="group" aria-label="翼面積大小">
             {WING_AREA_OPTIONS.map(option => (
               <button
@@ -1035,39 +1295,37 @@ function App() {
           <p className="wing-area-note">翼面積增加會同時增加升力與阻力；這是簡化的飛行模型。</p>
         </section>
 
-        <section>
-          <h2>投擲設定</h2>
-          <Slider label="仰角" value={settings.throwAngle} min={0} max={30} unit="°" onChange={v => update('throwAngle', v)} />
-          <Slider label="力道" value={settings.throwPower} min={20} max={100} unit="%" onChange={v => update('throwPower', v)} />
-          <h2 className="environment-title">風場實驗</h2>
-          <Slider label="陣風強度" value={settings.gustStrength} min={0} max={1} step={0.05} unit="×" onChange={v => update('gustStrength', v)} />
-          <Slider label="亂流程度" value={settings.turbulence} min={0} max={1} step={0.05} unit="×" onChange={v => update('turbulence', v)} />
-          <Slider label="陣風出現時間" value={settings.gustDelay} min={0} max={5} step={0.25} unit=" s" onChange={v => update('gustDelay', v)} />
-          <Slider label="機翼柔軟度" value={settings.wingSoftness} min={0} max={1} step={0.05} unit="×" onChange={v => update('wingSoftness', v)} />
-          <p className="wind-note">翼面積和風速會改變氣動力；機翼彎曲目前是視覺上的彈性效果。</p>
-          <Slider label="風速" value={settings.wind} min={settings.windDirection === 'front' ? -10 : 0} max={10} unit=" m/s" onChange={v => update('wind', v)} />
-          <div className="wind-presets" aria-label="風速快速設定">
-            {settings.windDirection === 'front' ? <>
-              <button className={settings.wind === -6 ? 'selected' : ''} onClick={() => update('wind', -6)}>逆風 −6</button>
-              <button className={settings.wind === 0 ? 'selected' : ''} onClick={() => update('wind', 0)}>無風</button>
-              <button className={settings.wind === 6 ? 'selected' : ''} onClick={() => update('wind', 6)}>順風 ＋6</button>
-            </> : <>
-              <button className={settings.wind === 3 ? 'selected' : ''} onClick={() => update('wind', 3)}>微風 3</button>
-              <button className={settings.wind === 6 ? 'selected' : ''} onClick={() => update('wind', 6)}>強風 6</button>
-              <button className={settings.wind === 10 ? 'selected' : ''} onClick={() => update('wind', 10)}>烈風 10</button>
-            </>}
-          </div>
-          <div className="wind-direction" aria-label="風向">
+        <section className={`setting-card throw-card ${['far', 'high', 'airtime'].includes(settings.goal) ? 'recommended' : ''}`}>
+          <h2>投擲</h2>
+          <Slider label="投擲角度" value={settings.throwAngle} min={0} max={90} unit="°" onChange={v => update('throwAngle', v)} />
+          <Slider label="投擲力道" value={settings.throwPower} min={20} max={100} unit="%" onChange={v => update('throwPower', v)} />
+          <Slider label="初始高度" value={settings.initialHeight} min={0.5} max={5} step={0.1} unit=" m" onChange={v => update('initialHeight', v)} />
+        </section>
+
+        <section className={`setting-card wind-card ${settings.goal === 'wind' ? 'recommended' : ''}`}>
+          <h2>風場</h2>
+          <div className="wind-direction">
             <span>風向</span>
-            <div>
-              <button className={settings.windDirection === 'left' ? 'selected' : ''} onClick={() => setWindDirection('left')}>左側</button>
-              <button className={settings.windDirection === 'front' ? 'selected' : ''} onClick={() => setWindDirection('front')}>正面</button>
-              <button className={settings.windDirection === 'right' ? 'selected' : ''} onClick={() => setWindDirection('right')}>右側</button>
+            <div className="wind-wheel" role="group" aria-label="風向">
+              <button className={settings.windDirection === 'front' ? 'selected' : ''} aria-label="正面風" aria-pressed={settings.windDirection === 'front'} onClick={() => setWindDirection('front')}>↑</button>
+              <button className={settings.windDirection === 'left' ? 'selected' : ''} aria-label="左側風" aria-pressed={settings.windDirection === 'left'} onClick={() => setWindDirection('left')}>←</button>
+              <span aria-hidden="true"><Wind size={16} /></span>
+              <button className={settings.windDirection === 'right' ? 'selected' : ''} aria-label="右側風" aria-pressed={settings.windDirection === 'right'} onClick={() => setWindDirection('right')}>→</button>
             </div>
           </div>
-          {settings.windDirection !== 'front' && <p className="wind-note">側風使用風速的絕對值，會改變傾斜方向與落點。</p>}
-          <h2 className="environment-title">環境</h2>
-          <div className="weather-options" aria-label="環境模式">
+          <Slider label="平均風速" value={settings.wind} min={settings.windDirection === 'front' ? -10 : 0} max={10} unit=" m/s" onChange={v => update('wind', v)} />
+          <div className="scenario-presets" aria-label="快速實驗情境">
+            <button className={activeScenario === 'baseline' ? 'selected' : ''} aria-pressed={activeScenario === 'baseline'} onClick={() => applyScenario('baseline')}>平穩基準</button>
+            <button className={activeScenario === 'leftWind' ? 'selected' : ''} aria-pressed={activeScenario === 'leftWind'} onClick={() => applyScenario('leftWind')}>左側風</button>
+            <button className={activeScenario === 'rightWind' ? 'selected' : ''} aria-pressed={activeScenario === 'rightWind'} onClick={() => applyScenario('rightWind')}>右側風</button>
+            <button className={activeScenario === 'gust' ? 'selected' : ''} aria-pressed={activeScenario === 'gust'} onClick={() => applyScenario('gust')}>強陣風</button>
+            <button className={activeScenario === 'typhoon' ? 'selected' : ''} aria-pressed={activeScenario === 'typhoon'} onClick={() => applyScenario('typhoon')}>颱風亂流</button>
+            <button className={activeScenario === 'noseHeavy' ? 'selected' : ''} aria-pressed={activeScenario === 'noseHeavy'} onClick={() => applyScenario('noseHeavy')}>機頭過重</button>
+            <button className={activeScenario === 'leftHeavy' ? 'selected' : ''} aria-pressed={activeScenario === 'leftHeavy'} onClick={() => applyScenario('leftHeavy')}>左翼過重</button>
+          </div>
+          <p className="wind-effect-note">{settings.wind === 0 ? '目前無風，可以先建立平穩的比較基準。' : `${settings.windDirection === 'left' ? '左側' : settings.windDirection === 'right' ? '右側' : settings.wind < 0 ? '逆' : '順'}風會改變飛機受力與落點，試飛看看姿態變化。`}</p>
+          <h3 className="card-subheading">天氣</h3>
+          <div className="weather-options" aria-label="天氣預設">
             <button className={settings.weather === 'clear' ? 'selected' : ''} onClick={() => setWeatherMode('clear')}><Sun size={15} />晴天</button>
             <button className={settings.weather === 'rain' ? 'selected' : ''} onClick={() => setWeatherMode('rain')}><CloudRain size={15} />下雨</button>
             <button className={settings.weather === 'typhoon' ? 'selected' : ''} onClick={() => setWeatherMode('typhoon')}><Wind size={15} />颱風</button>
@@ -1075,21 +1333,33 @@ function App() {
           {settings.weather === 'typhoon' && <p className="typhoon-warning">颱風模式：強風 10 m/s、斜向暴雨、陣風亂流與不規則側翻。</p>}
         </section>
 
+        <details className="advanced-settings setting-card" open={advancedOpen} onToggle={event => setAdvancedOpen(event.currentTarget.open)}>
+          <summary>進階設定</summary>
+          <p>想觀察更細的變因時再展開調整。</p>
+          <Slider label="陣風強度" value={settings.gustStrength} min={0} max={1} step={0.05} unit="×" onChange={v => update('gustStrength', v)} />
+          <Slider label="亂流程度" value={settings.turbulence} min={0} max={1} step={0.05} unit="×" onChange={v => update('turbulence', v)} />
+          <Slider label="陣風出現時間" value={settings.gustDelay} min={0} max={5} step={0.25} unit=" s" onChange={v => update('gustDelay', v)} />
+          <Slider label="機翼柔軟度" value={settings.wingSoftness} min={0} max={1} step={0.05} unit="×" onChange={v => update('wingSoftness', v)} />
+          <p className="wind-note">機翼柔軟度目前只改變紙翼彎曲外觀，不會改變氣動力計算。</p>
+        </details>
+
+      </aside>
+
+      <div className="flight-actions">
         {result && <section className="prediction-section">
           <h2><Brain size={15} />先預測，再試飛</h2>
           <div className="prediction-options">
             <button className={prediction === 'farther' ? 'selected' : ''} onClick={() => setPrediction('farther')}>距離增加</button>
             <button className={prediction === 'higher' ? 'selected' : ''} onClick={() => setPrediction('higher')}>高度增加</button>
-            <button className={prediction === 'longer' ? 'selected' : ''} onClick={() => setPrediction('longer')}>滯空增加</button>
+            {['wind', 'balance'].includes(settings.goal)
+              ? <button className={prediction === 'lessDeviation' ? 'selected' : ''} onClick={() => setPrediction('lessDeviation')}>側偏減少</button>
+              : <button className={prediction === 'longer' ? 'selected' : ''} onClick={() => setPrediction('longer')}>滯空增加</button>}
           </div>
           {predictionFeedback && <p className="prediction-feedback"><CheckCircle2 size={15} />{predictionFeedback}</p>}
         </section>}
-
-        <div className="flight-actions">
-          <button className="launch" disabled={isAnimating || Boolean(result && !prediction)} onClick={launch}><Plane size={20} />{isAnimating ? '飛行中…' : result && !prediction ? '請先選擇預測' : result ? '再次試飛' : '建立基準試飛'}</button>
-          {result && <button className="replay" disabled={isAnimating} onClick={replay}><Rewind size={18} />慢動作重播</button>}
-        </div>
-      </aside>
+        <button className="launch" disabled={isAnimating || Boolean(result && !prediction)} onClick={launch}><Plane size={20} />{isAnimating ? '飛行中…' : result && !prediction ? '請先選擇預測' : result ? '再次試飛' : '開始試飛'}</button>
+        {result && <button className="replay" disabled={isAnimating} onClick={replay}><Rewind size={18} />慢動作重播</button>}
+      </div>
 
       {isAnimating && telemetry && <section className="flight-hud" aria-live="polite" aria-label="飛行即時儀表">
         <strong>{flightPaused ? '已暫停' : '即時飛行'}</strong>
@@ -1101,11 +1371,11 @@ function App() {
       </section>}
 
       <section className="telemetry" aria-live="polite">
-        <div><Gauge size={17} /><span>預估{settings.goal === 'far' ? '距離' : '高度'}</span><strong>{score === null ? '--' : score.toFixed(1)}<small> m</small></strong></div>
+        <div><Gauge size={17} /><span>{score?.label ?? '目標結果'}</span><strong>{score ? score.value.toFixed(1) : '--'}<small> {score?.unit ?? ''}</small></strong></div>
         <div><Wind size={17} /><span>滯空時間</span><strong>{result ? result.airtime.toFixed(1) : '--'}<small> s</small></strong></div>
         <div><Crosshair size={17} /><span>重心位置</span><strong>{cgText}</strong></div>
         <p>{comparison
-          ? `和上次相比：距離 ${comparison.distance >= 0 ? '+' : ''}${comparison.distance.toFixed(1)} m，高度 ${comparison.peak >= 0 ? '+' : ''}${comparison.peak.toFixed(1)} m，側偏 ${comparison.deviation >= 0 ? '+' : ''}${comparison.deviation.toFixed(1)} m。`
+          ? `和上次相比：距離 ${comparison.distance >= 0 ? '+' : ''}${comparison.distance.toFixed(1)} m，高度 ${comparison.peak >= 0 ? '+' : ''}${comparison.peak.toFixed(1)} m，滯空 ${comparison.airtime >= 0 ? '+' : ''}${comparison.airtime.toFixed(1)} s，側偏 ${comparison.deviation >= 0 ? '+' : ''}${comparison.deviation.toFixed(1)} m，穩定度 ${(comparison.stability * 100) >= 0 ? '+' : ''}${(comparison.stability * 100).toFixed(0)}%。`
           : result?.verdict ?? '先建立基準試飛，再修改一個參數並預測結果。'}</p>
       </section>
 

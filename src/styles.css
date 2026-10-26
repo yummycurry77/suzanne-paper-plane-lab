@@ -16,6 +16,7 @@ button { cursor: pointer; }
 .app-shell { position: relative; width: 100%; height: 100dvh; overflow: hidden; }
 .scene { position: absolute; inset: 0; }
 .scene canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.scene canvas:focus-visible { outline: 3px solid #278ba0; outline-offset: -3px; }
 
 .topbar {
   position: absolute; z-index: 3; top: 0; left: 0; right: 0; height: 64px;
@@ -36,9 +37,10 @@ button { cursor: pointer; }
 .force-legend span { display: flex; align-items: center; gap: 6px; color: #395f53; font-size: 10px; font-weight: 700; }
 .force-legend i { width: 8px; height: 8px; border-radius: 50%; }
 .lift-dot { background: #2185d0; }.weight-dot { background: #e44f39; }.thrust-dot { background: #15966b; }.drag-dot { background: #d49a23; }
-.view-modes { position: absolute; z-index: 2; top: 80px; left: 376px; display: grid; grid-template-columns: repeat(3, 54px); gap: 3px; padding: 3px; border: 1px solid rgba(47, 91, 76, 0.16); border-radius: 6px; background: rgba(250, 253, 251, 0.9); backdrop-filter: blur(10px); }
+.view-modes { position: absolute; z-index: 2; top: 80px; left: 376px; display: grid; grid-template-columns: repeat(4, 54px); gap: 3px; padding: 3px; border: 1px solid rgba(47, 91, 76, 0.16); border-radius: 6px; background: rgba(250, 253, 251, 0.9); backdrop-filter: blur(10px); }
 .view-modes button { height: 30px; border: 0; border-radius: 4px; background: transparent; color: #526e65; font-size: 10px; font-weight: 700; }
 .view-modes button.active { background: #17694f; color: #fff; }
+.view-hint { position: absolute; z-index: 2; top: 119px; left: 376px; max-width: min(340px, calc(100vw - 24px)); padding: 5px 8px; border-radius: 4px; background: rgba(250, 253, 251, 0.88); color: #395f53; font-size: 10px; pointer-events: none; }
 .flight-event {
   position: absolute; z-index: 3; top: 126px; left: calc(50% + 180px); transform: translateX(-50%);
   min-width: 190px; max-width: min(300px, calc(100vw - 40px)); padding: 10px 14px;
@@ -71,6 +73,15 @@ button { cursor: pointer; }
 .control-panel section { padding: 18px 0 16px; border-bottom: 1px solid #dbe6e1; }
 .control-panel.is-flying section, .control-panel.is-flying .segmented { pointer-events: none; opacity: 0.62; }
 .control-panel section h2 { margin: 0 0 13px; font-size: 13px; color: #284c40; }
+.control-panel section.setting-card { margin: 10px 0; padding: 14px; border: 1px solid #d4e2dc; border-radius: 8px; background: rgba(255,255,255,.82); box-shadow: 0 3px 12px rgba(32,65,54,.05); }
+.control-panel section.setting-card.recommended { border-color: #6bb59b; box-shadow: inset 3px 0 #2f9b73, 0 3px 12px rgba(32,65,54,.05); }
+.control-panel section.setting-card.recommended h2::after { content: '建議先調'; display: inline-block; margin-left: 8px; padding: 2px 6px; border-radius: 10px; background: #e3f3eb; color: #247553; font-size: 9px; vertical-align: 1px; }
+.goal-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.goal-options button { min-height: 36px; padding: 5px 7px; border: 1px solid #d3e0da; border-radius: 6px; background: #fff; color: #4f6c62; font-size: 11px; font-weight: 700; }
+.goal-options button:last-child { grid-column: 1 / -1; }
+.goal-options button.selected { border-color: #2f9b73; background: #e4f3ec; color: #0f6549; box-shadow: inset 0 0 0 1px #2f9b73; }
+.position-label { margin: -3px 0 7px; color: #668077; font-size: 10px; }
+.card-subheading { margin: 17px 0 9px; color: #58746b; font-size: 11px; }
 .placement-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 13px; }
 .placement-options button { min-height: 34px; padding: 3px; border: 1px solid #cadbd4; border-radius: 5px; background: #fff; color: #4c6860; font-size: 10px; font-weight: 700; }
 .placement-options button.selected { border-color: #16865f; background: #e3f2ec; color: #0f6549; box-shadow: inset 0 0 0 1px #16865f; }
@@ -107,10 +118,18 @@ input[type='range'] { width: 100%; margin: 9px 0 0; accent-color: #e34e38; }
 .wind-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 9px; }
 .wind-presets button { min-height: 32px; padding: 3px; border: 1px solid #cadbd4; border-radius: 5px; background: #fff; color: #4c6860; font-size: 10px; font-weight: 700; }
 .wind-presets button.selected { border-color: #2185a0; background: #e4f3f5; color: #185e70; box-shadow: inset 0 0 0 1px #2185a0; }
-.wind-direction { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; margin-top: 12px; color: #5a7069; font-size: 11px; }
-.wind-direction > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; background: #e7efec; border-radius: 6px; }
-.wind-direction button { min-height: 29px; border: 0; border-radius: 4px; background: transparent; color: #526e65; font-size: 10px; font-weight: 700; }
-.wind-direction button.selected { background: #fff; color: #17694f; box-shadow: 0 2px 6px rgba(41, 78, 65, 0.12); }
+.wind-direction { display: grid; grid-template-columns: 45px 100px; align-items: center; gap: 10px; margin: 8px 0 12px; color: #5a7069; font-size: 11px; }
+.wind-wheel { display: grid; grid-template-columns: repeat(3, 30px); grid-template-rows: repeat(2, 30px); justify-items: center; align-items: center; }
+.wind-wheel button { width: 28px; height: 28px; border: 1px solid #d3e0da; border-radius: 50%; background: #fff; color: #526e65; font-size: 16px; font-weight: 800; line-height: 1; }
+.wind-wheel button:first-child { grid-column: 2; grid-row: 1; }
+.wind-wheel button:nth-child(2) { grid-column: 1; grid-row: 2; }
+.wind-wheel span { display: grid; place-items: center; grid-column: 2; grid-row: 2; color: #4b89a0; }
+.wind-wheel button:last-child { grid-column: 3; grid-row: 2; }
+.wind-wheel button.selected { border-color: #3c90a7; background: #e3f2f5; color: #17647b; box-shadow: inset 0 0 0 1px #3c90a7; }
+.scenario-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 10px; }
+.scenario-presets button { min-height: 32px; padding: 4px 5px; border: 1px solid #d6e2dd; border-radius: 5px; background: #f9fcfa; color: #48665b; font-size: 9px; font-weight: 700; }
+.scenario-presets button.selected { border-color: #2f9b73; background: #e4f3ec; color: #0f6549; box-shadow: inset 0 0 0 1px #2f9b73; }
+.wind-effect-note { margin: 9px 0 12px; color: #58746b; font-size: 10px; line-height: 1.5; }
 .wind-note { margin: 7px 0 0; color: #58746b; font-size: 9px; line-height: 1.45; }
 .control-panel section h2.environment-title { margin-top: 17px; }
 .weather-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
@@ -118,13 +137,22 @@ input[type='range'] { width: 100%; margin: 9px 0 0; accent-color: #e34e38; }
 .weather-options button.selected { border-color: #3f7181; background: #e3eef1; color: #2b5967; box-shadow: inset 0 0 0 1px #3f7181; }
 .typhoon-warning { margin: 9px 0 0; padding: 8px 9px; border-left: 3px solid #d49a23; background: #fff0d8; color: #805517; font-size: 10px; line-height: 1.5; }
 .prediction-feedback { display: flex; align-items: flex-start; gap: 6px; margin: 9px 0 0; color: #38685a; font-size: 10px; line-height: 1.45; }
+.flight-actions .prediction-section { margin: 0; padding: 10px; border: 1px solid rgba(47,91,76,.14); border-radius: 7px; background: rgba(250,253,251,.96); }
+.flight-actions .prediction-section h2 { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; color: #284c40; font-size: 11px; }
+.flight-actions .prediction-options button { min-height: 34px; font-size: 9px; }
+.flight-actions .prediction-feedback { margin-top: 7px; }
 .launch { width: 100%; height: 47px; display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 18px; border: 0; border-radius: 6px; background: #e54f39; color: #fff; font-weight: 800; box-shadow: 0 8px 18px rgba(198, 55, 35, 0.25); }
 .launch:active { transform: translateY(1px); }
 .launch:disabled { cursor: not-allowed; background: #95aaa2; box-shadow: none; }
-.flight-actions { display: grid; gap: 7px; margin-top: 18px; }
+.flight-actions { position: fixed; z-index: 4; right: 18px; bottom: 110px; display: grid; gap: 7px; width: min(270px, calc(100vw - 36px)); padding: 8px; border: 1px solid rgba(47,91,76,.14); border-radius: 9px; background: rgba(250,253,251,.94); box-shadow: 0 8px 24px rgba(32,65,54,.18); backdrop-filter: blur(12px); }
 .flight-actions .launch { margin-top: 0; }
 .replay { width: 100%; height: 39px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #c8d8d1; border-radius: 6px; background: #fff; color: #285d4d; font-size: 11px; font-weight: 800; }
 .replay:disabled { cursor: not-allowed; opacity: 0.52; }
+.advanced-settings { margin: 10px 0; padding: 12px 14px; border: 1px solid #d4e2dc; border-radius: 8px; background: rgba(255,255,255,.9); }
+.control-panel.is-flying .advanced-settings { pointer-events: none; opacity: .62; }
+.advanced-settings summary { color: #315f4f; font-size: 12px; font-weight: 800; cursor: pointer; }
+.advanced-settings > p { margin: 8px 0; color: #668077; font-size: 10px; line-height: 1.5; }
+.advanced-settings[open] summary { margin-bottom: 8px; }
 
 .telemetry {
   position: absolute; z-index: 2; left: 376px; right: 18px; bottom: 18px; min-height: 86px;
@@ -153,11 +181,14 @@ input[type='range'] { width: 100%; margin: 9px 0 0; accent-color: #e34e38; }
   .flight-controls .force-toggle svg { flex: none; }
   .force-legend { position: absolute; top: 68px; right: 12px; }
   .flight-hud { top: 108px; right: 10px; min-width: 185px; gap: 5px 8px; padding: 9px; font-size: 9px; }
-  .view-modes { position: absolute; top: 68px; left: 12px; grid-template-columns: repeat(3, 48px); }
+  .view-modes { position: absolute; top: 68px; left: 12px; grid-template-columns: repeat(4, 48px); }
+  .view-hint { top: 108px; left: 12px; max-width: calc(100vw - 24px); }
   .flight-event { position: absolute; top: 205px; left: 12px; min-width: 176px; max-width: min(250px, calc(100vw - 24px)); transform: none; }
   .scene { position: relative; height: 43dvh; min-height: 300px; }
-  .control-panel { position: relative; top: auto; left: auto; bottom: auto; width: auto; margin: -16px 12px 0; padding: 18px; overflow: visible; }
-  .telemetry { position: relative; left: auto; right: auto; bottom: auto; margin: 10px 12px 20px; grid-template-columns: repeat(3, 1fr); padding: 13px; }
+  .control-panel { position: relative; top: auto; left: auto; bottom: auto; width: auto; margin: -16px 12px 0; padding: 18px 18px 100px; overflow: visible; }
+  .control-panel.has-result { padding-bottom: 220px; }
+  .flight-actions { right: 12px; bottom: 10px; left: 12px; width: auto; }
+  .telemetry { position: relative; left: auto; right: auto; bottom: auto; margin: 10px 12px 88px; grid-template-columns: repeat(3, 1fr); padding: 13px; }
   .telemetry > div { min-width: 0; }
   .telemetry strong { font-size: 19px; }
   .telemetry p { grid-column: 1 / -1; padding: 8px 0 0; border-top: 1px solid rgba(255,255,255,.15); }
