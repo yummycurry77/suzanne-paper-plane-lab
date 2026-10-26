@@ -1683,7 +1683,6 @@ function App() {
         {result && <FlightChart result={result} previousResult={previousResult} />}
       </section>
 
-      <div className="hint">全景模式可拖曳旋轉 · 雙指縮放</div>
     </main>
   );
 }
