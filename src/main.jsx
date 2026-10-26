@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import * as THREE from 'three';
 import { createFlightPhysics } from './flightPhysics.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ArrowUpRight, Brain, CheckCircle2, CloudRain, Contrast, Crosshair, Eye, EyeOff, Gauge, Info, Moon, Pause, Play, Plane, Rewind, RotateCcw, Scale, StepForward, Sun, Wind, X } from 'lucide-react';
+import { ArrowUpRight, Brain, Camera, CheckCircle2, ChevronDown, CloudRain, Contrast, Crosshair, Eye, EyeOff, Gauge, Info, Moon, Pause, Play, Plane, Rewind, RotateCcw, Scale, StepForward, Sun, Wind, X } from 'lucide-react';
 import './styles.css';
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -27,6 +27,12 @@ const EXPERIMENT_GOALS = [
   { value: 'airtime', label: '滯空更久' },
   { value: 'wind', label: '測試抗風' },
   { value: 'balance', label: '比較配重' }
+];
+const CAMERA_MODE_OPTIONS = [
+  { value: 'side', label: '側視', detail: '從側面觀察高度與飛行弧線', icon: Crosshair },
+  { value: 'follow', label: '跟隨', detail: '鏡頭跟著紙飛機移動', icon: Plane },
+  { value: 'overview', label: '全景', detail: '查看場地與完整飛行路徑', icon: Eye },
+  { value: 'free', label: '環視', detail: '自由旋轉、縮放，也可用 WASD', icon: RotateCcw }
 ];
 const clipMultiplier = placement => placement === 'both' ? 2 : 1;
 
@@ -383,15 +389,15 @@ function updateRainStreaks(rain, weather, wind, windDirection, delta) {
 function makeEnvironment() {
   const environment = new THREE.Group();
   const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(95, 4.2),
+    new THREE.PlaneGeometry(135, 4.2),
     new THREE.MeshStandardMaterial({ color: '#7d8987', roughness: 1 })
   );
   road.rotation.x = -Math.PI / 2;
-  road.position.set(40, 0.012, 12);
+  road.position.set(57.5, 0.012, 12);
   environment.add(road);
   [-1.45, 1.45].forEach(z => {
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(95, 0.025, 0.09), new THREE.MeshStandardMaterial({ color: '#eef1dc' }));
-    stripe.position.set(40, 0.035, 12 + z);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(135, 0.025, 0.09), new THREE.MeshStandardMaterial({ color: '#eef1dc' }));
+    stripe.position.set(57.5, 0.035, 12 + z);
     environment.add(stripe);
   });
 
@@ -401,11 +407,11 @@ function makeEnvironment() {
   environment.add(car);
 
   const rearRoad = new THREE.Mesh(
-    new THREE.PlaneGeometry(95, 3.6),
+    new THREE.PlaneGeometry(135, 3.6),
     new THREE.MeshStandardMaterial({ color: '#899391', roughness: 1 })
   );
   rearRoad.rotation.x = -Math.PI / 2;
-  rearRoad.position.set(40, 0.01, -17.5);
+  rearRoad.position.set(57.5, 0.01, -17.5);
   environment.add(rearRoad);
   const rearCar = makeCar('#3978b8');
   rearCar.scale.setScalar(0.78);
@@ -434,8 +440,13 @@ function makeEnvironment() {
     tree.position.set(meters * WORLD_X_SCALE, 0, z);
     environment.add(tree);
   });
+  [78, 88, 98].forEach((meters, index) => {
+    const tree = makeTree(4.2 + index * 0.25, treeColors[(index + 2) % treeColors.length]);
+    tree.position.set(meters * WORLD_X_SCALE, 0, index % 2 ? -13 : 13);
+    environment.add(tree);
+  });
 
-  [5, 10, 20, 30, 40, 50, 60, 70].forEach((distance, index) => {
+  [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].forEach((distance, index) => {
     const marker = makeDistanceMarker(distance);
     marker.position.set(distance * WORLD_X_SCALE, 0, index % 2 ? -4.3 : -3.9);
     environment.add(marker);
@@ -444,7 +455,7 @@ function makeEnvironment() {
   const grassMaterial = new THREE.MeshStandardMaterial({ color: '#5f9d62', roughness: 1 });
   for (let index = 0; index < 40; index += 1) {
     const grass = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.55 + (index % 3) * 0.12, 5), grassMaterial);
-    const x = 2 + index * 2.15;
+    const x = 2 + index * 2.55;
     grass.position.set(x, 0.28, index % 2 ? 4.3 + (index % 4) : -4.5 - (index % 3));
     environment.add(grass);
   }
@@ -480,8 +491,8 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     const el = host.current;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#dfeee8');
-    scene.fog = new THREE.Fog('#dfeee8', 100, 130);
-    const camera = new THREE.PerspectiveCamera(42, el.clientWidth / el.clientHeight, 0.1, 180);
+    scene.fog = new THREE.Fog('#dfeee8', 145, 190);
+    const camera = new THREE.PerspectiveCamera(42, el.clientWidth / el.clientHeight, 0.1, 260);
     camera.position.set(14, 9, 17);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(el.clientWidth < 760 ? 1 : Math.min(window.devicePixelRatio, 1.5));
@@ -509,7 +520,7 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     controls.enableDamping = true;
     controls.enablePan = false;
     controls.minDistance = 2.5;
-    controls.maxDistance = 48;
+    controls.maxDistance = 140;
     controls.minPolarAngle = 0.01;
     controls.maxPolarAngle = Math.PI - 0.01;
     controls.rotateSpeed = 0.8;
@@ -580,17 +591,17 @@ function FlightScene({ settings, flightRequest, replayResult, onResult, onFlight
     scene.add(sun);
 
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(100, 70),
+      new THREE.PlaneGeometry(135, 70),
       new THREE.MeshStandardMaterial({ map: makeGrassTexture(renderer), color: '#e5f0df', roughness: 1 })
     );
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set(40, -0.05, 0);
+    ground.position.set(57.5, -0.05, 0);
     ground.receiveShadow = true;
     scene.add(ground);
 
-    const grid = new THREE.GridHelper(90, 45, '#6f9683', '#86ae98');
+    const grid = new THREE.GridHelper(135, 54, '#6f9683', '#86ae98');
     grid.position.y = 0.005;
-    grid.position.x = 43.75;
+    grid.position.x = 57.5;
     grid.material.transparent = true;
     grid.material.opacity = 0.28;
     scene.add(grid);
@@ -1265,7 +1276,7 @@ function App() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [activeScenario, setActiveScenario] = useState(null);
   const [activeStep, setActiveStep] = useState('plane');
-  const [sceneTheme, setSceneTheme] = useState(() => localStorage.getItem('flight-lab-theme') === 'dark' ? 'dark' : 'light');
+  const [sceneTheme, setSceneTheme] = useState('light');
   const [highContrast, setHighContrast] = useState(true);
   const [paperTone, setPaperTone] = useState('white');
   const [viewHintDismissed, setViewHintDismissed] = useState(false);
@@ -1273,10 +1284,6 @@ function App() {
   const [replayProgress, setReplayProgress] = useState(0);
   const [replaySeek, setReplaySeek] = useState({ id: 0, progress: 0 });
   const isReplayPlaying = isAnimating && flightRequest.mode === 'replay';
-
-  useEffect(() => {
-    localStorage.setItem('flight-lab-theme', sceneTheme);
-  }, [sceneTheme]);
 
   useEffect(() => {
     if (!flightEvent) return undefined;
@@ -1471,12 +1478,25 @@ function App() {
         </div>}
       </div>
 
-      <div className="view-modes" aria-label="觀看模式">
-        <button className={cameraMode === 'side' ? 'active' : ''} aria-pressed={cameraMode === 'side'} onClick={() => setCameraMode('side')}>側視</button>
-        <button className={cameraMode === 'follow' ? 'active' : ''} aria-pressed={cameraMode === 'follow'} onClick={() => setCameraMode('follow')}>跟隨</button>
-        <button className={cameraMode === 'overview' ? 'active' : ''} aria-pressed={cameraMode === 'overview'} onClick={() => setCameraMode('overview')}>全景</button>
-        <button className={cameraMode === 'free' ? 'active' : ''} aria-pressed={cameraMode === 'free'} onClick={() => setCameraMode('free')}>環視</button>
-      </div>
+      <details className="camera-switcher">
+        <summary aria-label="選擇觀看視角">
+          <Camera size={17} />
+          <span><small>觀看視角</small><strong>{CAMERA_MODE_OPTIONS.find(option => option.value === cameraMode)?.label}</strong></span>
+          <ChevronDown className="camera-chevron" size={15} />
+        </summary>
+        <div className="camera-options" role="group" aria-label="觀看視角">
+          {CAMERA_MODE_OPTIONS.map(option => {
+            const Icon = option.icon;
+            return <button key={option.value} className={cameraMode === option.value ? 'active' : ''} aria-pressed={cameraMode === option.value} onClick={event => {
+              setCameraMode(option.value);
+              const menu = event.currentTarget.closest('details');
+              if (menu) menu.open = false;
+            }}>
+              <Icon size={18} /><span><strong>{option.label}</strong><small>{option.detail}</small></span>
+            </button>;
+          })}
+        </div>
+      </details>
       {cameraMode === 'free' && !viewHintDismissed && <div className="view-hint" role="status"><span>按住右鍵旋轉・滾輪縮放・點畫面後用 WASD 移動</span><button aria-label="關閉鏡頭提示" onClick={() => setViewHintDismissed(true)}><X size={13} /></button></div>}
       {cameraMode === 'free' && viewHintDismissed && <button className="view-hint-reopen" onClick={() => setViewHintDismissed(false)}><Info size={14} />鏡頭操作</button>}
       {!isAnimating && <div className="wind-compass" aria-label={`風向${settings.windDirection}，風速 ${Math.abs(settings.wind)} 公尺每秒`}>

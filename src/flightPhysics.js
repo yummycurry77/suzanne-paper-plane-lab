@@ -159,7 +159,7 @@ export function createFlightPhysics(settings, seed = 1337) {
     }
     if (stalledFor > 0.45) cause = '失速後下墜';
     if (stalledFor > 1.4 && stability < 0.6) cause = '重心不穩且持續失速';
-    if (position.y <= 0 || elapsed >= 12 || (position.x > 110 && position.y < 0.2)) {
+    if (position.y <= 0 || elapsed >= 12 || (position.x > 100 && position.y < 0.2)) {
       position.y = Math.max(0, position.y);
       done = true;
       addEvent(elapsed, cause, cause === '穩定飛行' ? '飛機完成飛行' : '受力與姿態變化造成飛行失控', cause === '穩定飛行' ? 'peak' : 'danger');

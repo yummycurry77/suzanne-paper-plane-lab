@@ -49,9 +49,6 @@ button { cursor: pointer; }
 .force-legend span { display: flex; align-items: center; gap: 6px; color: #395f53; font-size: 10px; font-weight: 700; }
 .force-legend i { width: 8px; height: 8px; border-radius: 50%; }
 .lift-dot { background: #2185d0; }.weight-dot { background: #e44f39; }.thrust-dot { background: #15966b; }.drag-dot { background: #d49a23; }
-.view-modes { position: absolute; z-index: 2; top: 80px; left: calc(var(--control-panel-width) + 36px); display: grid; grid-template-columns: repeat(4, 54px); gap: 3px; padding: 3px; border: 1px solid rgba(47, 91, 76, 0.16); border-radius: 6px; background: rgba(250, 253, 251, 0.9); backdrop-filter: blur(10px); }
-.view-modes button { height: 30px; border: 0; border-radius: 4px; background: transparent; color: #526e65; font-size: 10px; font-weight: 700; }
-.view-modes button.active { background: #17694f; color: #fff; }
 .view-hint { position: absolute; z-index: 2; top: 119px; left: calc(var(--control-panel-width) + 36px); max-width: min(340px, calc(100vw - 24px)); padding: 5px 8px; border-radius: 4px; background: rgba(250, 253, 251, 0.88); color: #395f53; font-size: 10px; pointer-events: none; }
 .flight-event {
   position: absolute; z-index: 3; top: 126px; left: calc(50% + 180px); transform: translateX(-50%);
@@ -199,7 +196,6 @@ input[type='range'] { width: 100%; margin: 9px 0 0; accent-color: #e34e38; }
   .flight-controls .force-toggle svg { flex: none; }
   .force-legend { position: absolute; top: 68px; right: 12px; }
   .flight-hud { top: 108px; right: 10px; min-width: 185px; gap: 5px 8px; padding: 9px; font-size: 9px; }
-  .view-modes { position: absolute; top: 68px; left: 12px; grid-template-columns: repeat(4, 48px); }
   .view-hint { top: 108px; left: 12px; max-width: calc(100vw - 24px); }
   .flight-event { position: absolute; top: 205px; left: 12px; min-width: 176px; max-width: min(250px, calc(100vw - 24px)); transform: none; }
   .scene { position: relative; height: 43dvh; min-height: 300px; }
@@ -236,9 +232,6 @@ button:active:not(:disabled) { transform: translateY(1px) scale(.985); }
 .record { color: var(--muted); }
 .force-toggle, .icon-button { border-color: #d8e5df; border-radius: var(--control-radius); box-shadow: 0 2px 7px rgba(23,61,50,.035); }
 .force-toggle[aria-pressed='true'] { border-color: #88c6aa; background: var(--green-soft); color: #17664d; }
-.view-modes { border-color: rgba(23,61,50,.09); border-radius: 10px; padding: 5px; background: rgba(248,252,249,.94); box-shadow: 0 8px 22px rgba(23,61,50,.08); }
-.view-modes button { height: 32px; border-radius: 7px; }
-.view-modes button.active { background: var(--forest); }
 .view-hint { border: 1px solid rgba(23,61,50,.08); border-radius: 7px; box-shadow: 0 4px 14px rgba(23,61,50,.05); }
 .control-panel { top: 86px; left: 18px; bottom: 122px; width: min(var(--control-panel-width), calc(100vw - 36px)); padding: 20px 18px; border: 1px solid rgba(23,61,50,.08); border-radius: 14px; background: rgba(250,253,251,.96); box-shadow: 0 20px 55px rgba(27,66,52,.12); }
 .panel-head { align-items: center; margin-bottom: 14px; }
@@ -397,7 +390,6 @@ button:focus-visible { outline-color: var(--sky); }
 .dark-theme .flight-actions,
 .dark-theme .force-legend,
 .dark-theme .wind-compass,
-.dark-theme .view-modes,
 .dark-theme .view-hint,
 .dark-theme .view-hint-reopen {
   border-color: rgba(218,241,229,.12);
@@ -450,7 +442,6 @@ button:focus-visible { outline-color: var(--sky); }
 .dark-theme .flight-chart-events span { background: rgba(255,255,255,.12); }
 .dark-theme .paper-tone-options button small { color: #b0c8bd; }
 .dark-theme .paper-performance { border-left-color: var(--sky); background: #233d3c; color: #c6e0db; }
-.dark-theme .view-modes button.active { background: #74c49b; color: #173d32; }
 .dark-theme .force-toggle[aria-pressed='true'], .dark-theme .header-tools .icon-button[aria-pressed='true'] { background: #244b3d; color: #ddf9e9; }
 
 .high-contrast { --line: #9db9ab; --muted: #405d51; }
@@ -509,7 +500,7 @@ button:focus-visible { outline-color: var(--sky); }
 }
 
 /* Readability pass: raise the smallest text and touch targets across the UI. */
-.record, .force-toggle, .view-modes button, .view-hint, .view-hint-reopen,
+.record, .force-toggle, .view-hint, .view-hint-reopen,
 .force-legend span, .wind-compass, .flight-hud { font-size: 12px; }
 .flight-hud strong { font-size: 14px; }
 .flight-event strong { font-size: 14px; }
@@ -542,7 +533,6 @@ button:focus-visible { outline-color: var(--sky); }
 .chart-tabs button { min-height: 30px; font-size: 10px; }
 .chart-axis, .chart-legend, .flight-chart-events span { font-size: 10px; }
 .flight-stages { font-size: 9px; }
-.view-modes button { height: 36px; }
 .stepper button { height: 36px; }
 .wind-wheel button { width: 32px; height: 32px; }
 .icon-button { min-width: 40px; min-height: 40px; }
@@ -589,4 +579,36 @@ button:focus-visible { outline-color: var(--sky); }
   .setup-status, .position-label, .wind-effect-note, .wing-area-note,
   .paper-performance, .slider-hint, .status-summary, .balance-status, .cg-status { font-size: 13px; }
   .plane-map { font-size: 11px; }
+}
+
+.camera-switcher { position: absolute; z-index: 6; top: 80px; left: calc(var(--control-panel-width) + 36px); width: 205px; color: var(--forest); }
+.camera-switcher > summary { display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 7px 11px; border: 1px solid rgba(23,61,50,.14); border-radius: 11px; background: rgba(250,253,251,.96); box-shadow: 0 7px 20px rgba(23,61,50,.1); cursor: pointer; list-style: none; }
+.camera-switcher > summary::-webkit-details-marker { display: none; }
+.camera-switcher > summary > svg:first-child { flex: none; color: var(--sky); }
+.camera-switcher > summary span { display: grid; gap: 1px; flex: 1; }
+.camera-switcher > summary small { color: #668077; font-size: 10px; }
+.camera-switcher > summary strong { color: var(--forest); font-size: 13px; }
+.camera-switcher .camera-chevron { flex: none; color: #6a8379; transition: transform 160ms ease; }
+.camera-switcher[open] .camera-chevron { transform: rotate(180deg); }
+.camera-options { position: absolute; top: calc(100% + 7px); left: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; width: min(330px, calc(100vw - 24px)); padding: 8px; border: 1px solid rgba(23,61,50,.14); border-radius: 12px; background: rgba(250,253,251,.98); box-shadow: 0 14px 34px rgba(23,61,50,.16); backdrop-filter: blur(12px); }
+.camera-options button { display: flex; align-items: flex-start; gap: 8px; min-width: 0; min-height: 70px; padding: 10px 9px; border: 1px solid #d9e7e0; border-radius: 9px; background: #fff; color: #526e63; text-align: left; }
+.camera-options button > svg { flex: none; margin-top: 1px; color: var(--sky); }
+.camera-options button span { display: grid; gap: 3px; min-width: 0; }
+.camera-options button strong { color: #274c3e; font-size: 12px; }
+.camera-options button small { color: #637c71; font-size: 10px; line-height: 1.4; }
+.camera-options button.active { border-color: var(--green); background: var(--green-soft); box-shadow: inset 0 0 0 1px rgba(47,155,115,.25); }
+.camera-options button.active > svg, .camera-options button.active strong { color: #145e45; }
+.camera-switcher:focus-within > summary, .camera-options button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
+.dark-theme .camera-switcher > summary, .dark-theme .camera-options { border-color: #789889; background: #1d382e; color: #eff9f4; }
+.dark-theme .camera-switcher > summary small, .dark-theme .camera-options button small { color: #d2e5dc; }
+.dark-theme .camera-switcher > summary strong, .dark-theme .camera-options button strong { color: #f1faf5; }
+.dark-theme .camera-options button { border-color: #668678; background: #274438; color: #edf7f2; }
+.dark-theme .camera-options button.active { border-color: #9ce0b8; background: #315c47; }
+.dark-theme .camera-options button.active > svg, .dark-theme .camera-options button.active strong { color: #f2fff7; }
+.high-contrast .camera-switcher > summary, .high-contrast .camera-options button { border-width: 2px; }
+.dark-theme.high-contrast .camera-switcher > summary, .dark-theme.high-contrast .camera-options button { border-color: #d2eee0; }
+
+@media (max-width: 760px) {
+  .camera-switcher { top: 68px; left: 12px; width: 205px; }
+  .camera-options { width: min(330px, calc(100vw - 24px)); }
 }
