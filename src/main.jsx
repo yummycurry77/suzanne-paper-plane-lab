@@ -1266,7 +1266,7 @@ function App() {
   const [activeScenario, setActiveScenario] = useState(null);
   const [activeStep, setActiveStep] = useState('plane');
   const [sceneTheme, setSceneTheme] = useState(() => localStorage.getItem('flight-lab-theme') === 'dark' ? 'dark' : 'light');
-  const [highContrast, setHighContrast] = useState(false);
+  const [highContrast, setHighContrast] = useState(true);
   const [paperTone, setPaperTone] = useState('white');
   const [viewHintDismissed, setViewHintDismissed] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(1);
