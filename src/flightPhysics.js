@@ -55,6 +55,7 @@ export function createFlightPhysics(settings, seed = 1337) {
   };
   const sample = () => ({
     x: position.x, y: Math.max(0, position.y), z: position.z, t: elapsed,
+    peak, verticalSpeed: velocity.y,
     cgX: 1.6 - cg * 0.03,
     pitch: attitude.pitch, roll: attitude.roll, yaw: attitude.yaw,
     lift: lastForces.lift, drag: lastForces.drag,
