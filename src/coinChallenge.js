@@ -15,12 +15,12 @@ export const COIN_LANES = [
   {
     id: 'upper',
     label: '上方金幣',
-    description: '較高的弧線，需要較大的角度或力道。',
+    description: '較高且更陡的弧線，建議提高投擲角度或力道。',
     color: '#ffd86b',
     startX: 8,
     endX: 50,
     baseY: 4.85,
-    peakY: 9.25,
+    peakY: 10.75,
     count: 8
   }
 ];

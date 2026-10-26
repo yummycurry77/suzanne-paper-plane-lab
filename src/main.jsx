@@ -1411,17 +1411,28 @@ function App() {
     setFlightEvent({ label: '吃到金幣', detail: `${coin.label} +1`, tone: 'peak' });
   };
   const handleCoinChallengeFlightComplete = () => {
+    const challengeFinished = coinChallenge.active
+      && coinChallenge.attempts + 1 >= COIN_CHALLENGE_ATTEMPTS;
     setCoinChallenge(current => {
       if (!current.active) return current;
       const attempts = current.attempts + 1;
+      const finished = attempts >= COIN_CHALLENGE_ATTEMPTS;
       return {
         ...current,
+        active: !finished,
         attempts,
         lastFlightScore: current.currentFlightScore,
         currentFlightScore: 0,
-        finished: attempts >= COIN_CHALLENGE_ATTEMPTS
+        finished
       };
     });
+    if (challengeFinished) {
+      setResult(null);
+      setPreviousResult(null);
+      setPrediction(null);
+      setPredictionFeedback(null);
+      setPredictionSummary(null);
+    }
   };
   const startCoinChallenge = () => {
     if (isAnimating) return;
@@ -1688,9 +1699,9 @@ function App() {
           <button className="coin-challenge-button" type="button" disabled={isAnimating} onClick={startCoinChallenge}>
             {coinChallenge.active ? (coinChallenge.finished ? '再玩一次' : '重新開始挑戰') : '開始金幣挑戰'}
           </button>
-          {coinChallenge.active && <p className="coin-challenge-status" role="status">
+          {(coinChallenge.active || coinChallenge.finished) && <p className="coin-challenge-status" role="status">
             {coinChallenge.finished
-              ? `挑戰完成！你總共吃到 ${coinChallenge.score} / ${COIN_TARGETS.length} 枚金幣。`
+              ? `挑戰完成！你總共吃到 ${coinChallenge.score} / ${COIN_TARGETS.length} 枚金幣。已回到一般模擬，可以直接試飛。`
               : coinChallenge.attempts === 0
                 ? '挑戰已開始，先觀察上下兩道弧線的位置。'
                 : `還剩 ${COIN_CHALLENGE_ATTEMPTS - coinChallenge.attempts} 次投擲。`}
