@@ -544,6 +544,44 @@ button:focus-visible { outline-color: var(--sky); }
   .chart-axis, .chart-legend, .flight-chart-events span { font-size: 10px; }
 }
 
+.coin-challenge-card {
+  border-color: rgba(213, 155, 48, .28) !important;
+  background: linear-gradient(145deg, rgba(255, 250, 232, .94), rgba(255, 255, 255, .86));
+}
+.coin-challenge-card.active {
+  border-color: #d49b31 !important;
+  box-shadow: 0 0 0 2px rgba(212, 155, 49, .12), 0 8px 18px rgba(132, 92, 23, .08);
+}
+.coin-challenge-card h2 { color: #805b1d !important; }
+.coin-challenge-intro { margin: -4px 0 12px; color: #76633d; font-size: 12px; line-height: 1.55; }
+.coin-scoreboard { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+.coin-scoreboard div { display: grid; gap: 2px; padding: 8px 5px; border: 1px solid rgba(187, 137, 42, .22); border-radius: 8px; background: rgba(255, 255, 255, .66); text-align: center; }
+.coin-scoreboard span { color: #8b7650; font-size: 10px; }
+.coin-scoreboard strong { color: #6a4b12; font-size: 19px; font-variant-numeric: tabular-nums; }
+.coin-scoreboard small { font-size: 10px; font-weight: 700; }
+.coin-lane-summary { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; color: #7a6744; font-size: 11px; }
+.coin-lane-summary span { display: inline-flex; align-items: center; gap: 5px; }
+.coin-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .65), 0 1px 3px rgba(90, 60, 10, .22); }
+.coin-dot.lower { background: #f0ae36; }
+.coin-dot.upper { background: #ffd86b; }
+.coin-challenge-button { width: 100%; min-height: 42px; border: 1px solid #c28a25; border-radius: 8px; background: #f2bd4d; color: #563d0e; font-size: 13px; font-weight: 800; box-shadow: 0 4px 10px rgba(157, 107, 20, .14); }
+.coin-challenge-button:hover:not(:disabled) { background: #eeb13a; }
+.coin-challenge-button:disabled { cursor: not-allowed; opacity: .58; }
+.coin-challenge-status { margin: 9px 0 0; color: #755d2e; font-size: 11px; line-height: 1.5; }
+.dark-theme .coin-challenge-card { border-color: #a9823b !important; background: linear-gradient(145deg, rgba(74, 60, 34, .92), rgba(37, 57, 46, .9)); }
+.dark-theme .coin-challenge-card h2 { color: #ffe2a0 !important; }
+.dark-theme .coin-challenge-intro, .dark-theme .coin-lane-summary, .dark-theme .coin-challenge-status { color: #e2cf9f; }
+.dark-theme .coin-scoreboard div { border-color: #9b7b3f; background: rgba(41, 49, 35, .78); }
+.dark-theme .coin-scoreboard span { color: #d2bd8c; }
+.dark-theme .coin-scoreboard strong { color: #ffe3a3; }
+.dark-theme .coin-challenge-button { border-color: #d2a747; background: #bd8c2f; color: #1d2a20; }
+.high-contrast .coin-challenge-card { border-width: 2px !important; }
+
+@media (max-width: 430px) {
+  .coin-scoreboard strong { font-size: 17px; }
+  .coin-challenge-intro { font-size: 11px; }
+}
+
 /* Give the experiment controls more room and make their labels easier to scan. */
 .control-panel { padding-left: 20px; padding-right: 20px; }
 .control-panel section.setting-card { padding: 17px; }
