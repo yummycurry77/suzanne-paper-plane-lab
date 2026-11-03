@@ -602,12 +602,14 @@ button:focus-visible { outline-color: var(--sky); }
 .learning-mode-options button.selected > svg, .learning-mode-options button.selected b { color: #145e45; }
 .learning-module-details { display: grid; gap: 8px; margin-top: 9px; }
 .learning-module-details > .setting-card { margin: 0; }
-.parameter-locked { pointer-events: none; opacity: .42; filter: saturate(.55); position: relative; }
+.parameter-locked { pointer-events: none; opacity: .42; position: relative; }
 .parameter-locked::after { content: '已鎖定：本任務不調整這一區'; position: absolute; top: 10px; right: 12px; padding: 4px 7px; border-radius: 999px; background: #edf2ef; color: #6a7d74; font-size: 9px; font-weight: 800; }
 .parameter-focused { border-color: #e39a61 !important; box-shadow: 0 0 0 2px rgba(227,154,97,.2), 0 7px 20px rgba(84,76,43,.08) !important; }
 .parameter-focused::before { content: '請調整這一區'; display: block; margin: -5px 0 8px; color: #b45d37; font-size: 10px; font-weight: 800; }
-.parameter-control-locked, .plane-card button:disabled, .wind-card button:disabled { opacity: .42; filter: saturate(.55); cursor: not-allowed; }
+.parameter-control-locked, .plane-card button:disabled, .wind-card button:disabled { opacity: .42; cursor: not-allowed; }
+.parameter-locked button:disabled { opacity: 1; cursor: default; }
 .parameter-control-locked input:disabled { opacity: .58; cursor: not-allowed; }
+.parameter-locked .parameter-control-locked, .parameter-locked .parameter-control-locked input:disabled { opacity: 1; cursor: default; }
 .experiment-task-card { border-color: #9fc9b4 !important; background: linear-gradient(145deg, rgba(246, 252, 248, .98), rgba(255, 255, 255, .9)); }
 .task-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .task-card-heading h2 { margin: 0 !important; }
