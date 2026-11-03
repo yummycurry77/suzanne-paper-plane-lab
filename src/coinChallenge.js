@@ -10,6 +10,7 @@ export const COIN_LANES = [
     endX: 50,
     baseY: 2.55,
     peakY: 6.35,
+    arcPower: 1,
     count: 8
   },
   {
@@ -21,6 +22,7 @@ export const COIN_LANES = [
     endX: 50,
     baseY: 4.85,
     peakY: 10.75,
+    arcPower: 1.45,
     count: 8
   }
 ];
@@ -28,7 +30,9 @@ export const COIN_LANES = [
 export const COIN_TARGETS = COIN_LANES.flatMap(lane => (
   Array.from({ length: lane.count }, (_, index) => {
     const progress = index / (lane.count - 1);
-    const arc = 4 * progress * (1 - progress);
+    // The upper lane uses a higher power to concentrate its rise near the
+    // middle, making its launch angle visibly steeper than the lower lane.
+    const arc = Math.pow(4 * progress * (1 - progress), lane.arcPower);
     return {
       id: `${lane.id}-${index + 1}`,
       lane: lane.id,

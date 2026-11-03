@@ -1411,8 +1411,6 @@ function App() {
     setFlightEvent({ label: '吃到金幣', detail: `${coin.label} +1`, tone: 'peak' });
   };
   const handleCoinChallengeFlightComplete = () => {
-    const challengeFinished = coinChallenge.active
-      && coinChallenge.attempts + 1 >= COIN_CHALLENGE_ATTEMPTS;
     setCoinChallenge(current => {
       if (!current.active) return current;
       const attempts = current.attempts + 1;
@@ -1426,14 +1424,17 @@ function App() {
         finished
       };
     });
-    if (challengeFinished) {
-      setResult(null);
-      setPreviousResult(null);
-      setPrediction(null);
-      setPredictionFeedback(null);
-      setPredictionSummary(null);
-    }
   };
+  useEffect(() => {
+    if (!coinChallenge.finished) return;
+    // Leave the challenge immediately after the final throw so the next
+    // launch uses the normal simulator flow and no longer expects coins.
+    setResult(null);
+    setPreviousResult(null);
+    setPrediction(null);
+    setPredictionFeedback(null);
+    setPredictionSummary(null);
+  }, [coinChallenge.finished]);
   const startCoinChallenge = () => {
     if (isAnimating) return;
     setCoinChallenge({ ...createCoinChallengeState(), active: true });
