@@ -34,7 +34,7 @@ const EXPERIMENT_TASKS = [
     value: 'windDistance', label: '風速與飛行距離', question: '風速變大會讓飛行距離增加嗎？', variableLabel: '風速', variableKeys: ['wind'], response: '飛行距離、側偏距離', controls: '紙張、配重、投擲力道、投擲角度', prediction: '距離增加或減少'
   },
   {
-    value: 'weightStability', label: '配重與穩定度', question: '配重的數量或位置，哪一種改變更能提升穩定度？', variableLabel: '配重數量或位置（擇一）', variableKeys: ['clipCount', 'clipPosition'], response: '側偏距離、穩定度、側傾', controls: '風速、紙張、另一種配重設定、投擲方式', prediction: '側偏減少或增加'
+    value: 'weightStability', label: '配重與穩定度', question: '配重的數量、側別或前後位置，哪一種改變更能提升穩定度？', variableLabel: '配重數量、側別或前後位置（擇一）', variableKeys: ['clipCount', 'clipPlacement', 'clipPosition'], response: '側偏距離、穩定度、側傾', controls: '風速、紙張、投擲方式、另外兩種配重設定', prediction: '側偏減少或增加'
   },
   {
     value: 'angleStall', label: '投擲角度與失速', question: '投擲角度太大會不會失速？', variableLabel: '投擲角度', variableKeys: ['throwAngle'], response: '最高高度、飛行距離、失速事件', controls: '風速、配重、紙張、投擲力道', prediction: '高度增加但距離可能減少'
@@ -1532,6 +1532,8 @@ function App() {
   const activeVariableKey = committedVariableKey ?? candidateVariableKeys[0];
   const activeVariableLabel = committedVariableKey === 'clipCount'
     ? '配重數量'
+    : committedVariableKey === 'clipPlacement'
+      ? '配重側別'
     : committedVariableKey === 'clipPosition'
       ? '配重位置'
       : activeTask.variableLabel;
@@ -1638,7 +1640,7 @@ function App() {
     setPrediction(null);
     setPredictionFeedback(null);
     setExperimentWarning(isExperimentMode && baselineResult && candidateVariableKeys.includes(key)
-      ? `已修改${key === 'clipCount' ? '配重數量' : key === 'clipPosition' ? '配重位置' : activeVariableLabel}，可以先選擇預測再試飛。`
+      ? `已修改${key === 'clipCount' ? '配重數量' : key === 'clipPlacement' ? '配重側別' : key === 'clipPosition' ? '配重位置' : activeVariableLabel}，可以先選擇預測再試飛。`
       : null);
   };
   const updatePaperTone = value => {
