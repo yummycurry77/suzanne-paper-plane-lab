@@ -139,6 +139,8 @@ input[type='range'] { width: 100%; margin: 9px 0 0; accent-color: #e34e38; }
 .scenario-presets button { min-height: 32px; padding: 4px 5px; border: 1px solid #d6e2dd; border-radius: 5px; background: #f9fcfa; color: #48665b; font-size: 9px; font-weight: 700; }
 .scenario-presets button.selected { border-color: #2f9b73; background: #e4f3ec; color: #0f6549; box-shadow: inset 0 0 0 1px #2f9b73; }
 .wind-effect-note { margin: 9px 0 12px; color: #58746b; font-size: 10px; line-height: 1.5; }
+.scenario-explanation { display: grid; gap: 3px; margin: 8px 0 10px; padding: 8px 9px; border-left: 3px solid #d49a23; border-radius: 0 7px 7px 0; background: #fff7e7; color: #765924; font-size: 10px; line-height: 1.45; }
+.scenario-explanation b { color: #805517; }
 .wind-note { margin: 7px 0 0; color: #58746b; font-size: 9px; line-height: 1.45; }
 .control-panel section h2.environment-title { margin-top: 17px; }
 .weather-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
@@ -580,6 +582,121 @@ button:focus-visible { outline-color: var(--sky); }
 @media (max-width: 430px) {
   .coin-scoreboard strong { font-size: 17px; }
   .coin-challenge-intro { font-size: 11px; }
+}
+
+/* Guided experiment workflow */
+.experiment-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.learning-modules { margin: 10px 0 14px; padding: 14px; border: 1px solid #cbded4; border-radius: 12px; background: rgba(245, 251, 247, .78); }
+.learning-modules-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+.learning-modules-heading h2 { display: flex; align-items: center; gap: 7px; margin: 0 0 3px; color: #173d32; font-size: 14px; }
+.learning-modules-heading h2 svg { color: #3d90a4; }
+.learning-modules-heading p { margin: 0; color: #668077; font-size: 10px; line-height: 1.4; }
+.learning-modules-heading > span { flex: none; padding: 4px 7px; border-radius: 999px; background: #e7f3ed; color: #287553; font-size: 9px; font-weight: 800; }
+.learning-mode-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.learning-mode-options button { display: flex; align-items: flex-start; gap: 8px; min-height: 58px; padding: 10px; border: 1px solid #d4e3dc; border-radius: 9px; background: #fff; color: #4e6b60; text-align: left; }
+.learning-mode-options button > svg { flex: none; margin-top: 1px; color: #548a9a; }
+.learning-mode-options button span { display: grid; gap: 3px; }
+.learning-mode-options button b { color: #315f4f; font-size: 12px; }
+.learning-mode-options button small { color: #6b8177; font-size: 9px; line-height: 1.35; }
+.learning-mode-options button.selected { border-color: #3d9b73; background: #e7f5ed; box-shadow: inset 0 0 0 1px rgba(61,155,115,.24); }
+.learning-mode-options button.selected > svg, .learning-mode-options button.selected b { color: #145e45; }
+.learning-module-details { display: grid; gap: 8px; margin-top: 9px; }
+.learning-module-details > .setting-card { margin: 0; }
+.parameter-locked { pointer-events: none; opacity: .42; filter: saturate(.55); position: relative; }
+.parameter-locked::after { content: '已鎖定：本任務不調整這一區'; position: absolute; top: 10px; right: 12px; padding: 4px 7px; border-radius: 999px; background: #edf2ef; color: #6a7d74; font-size: 9px; font-weight: 800; }
+.parameter-focused { border-color: #e39a61 !important; box-shadow: 0 0 0 2px rgba(227,154,97,.2), 0 7px 20px rgba(84,76,43,.08) !important; }
+.parameter-focused::before { content: '請調整這一區'; display: block; margin: -5px 0 8px; color: #b45d37; font-size: 10px; font-weight: 800; }
+.parameter-control-locked, .plane-card button:disabled, .wind-card button:disabled { opacity: .42; filter: saturate(.55); cursor: not-allowed; }
+.parameter-control-locked input:disabled { opacity: .58; cursor: not-allowed; }
+.experiment-task-card { border-color: #9fc9b4 !important; background: linear-gradient(145deg, rgba(246, 252, 248, .98), rgba(255, 255, 255, .9)); }
+.task-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.task-card-heading h2 { margin: 0 !important; }
+.task-level { color: #668077; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.task-question { margin: 0 0 10px; color: #174e3d; font-size: 16px; font-weight: 800; line-height: 1.4; }
+.task-details { display: grid; gap: 5px; margin-bottom: 11px; padding: 9px 10px; border-radius: 8px; background: #eef8f2; color: #47695a; font-size: 11px; line-height: 1.4; }
+.task-details span { display: grid; grid-template-columns: 62px 1fr; gap: 8px; }
+.task-details b { color: #247554; }
+.task-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.task-options button { min-height: 38px; padding: 6px 8px; border: 1px solid #d1e3d9; border-radius: 8px; background: #fff; color: #4a685c; font-size: 11px; font-weight: 700; text-align: left; }
+.task-options button.selected { border-color: #2f9b73; background: #dff2e8; color: #145e45; box-shadow: inset 0 0 0 1px rgba(47,155,115,.24); }
+.task-options button:disabled:not(.selected) { cursor: not-allowed; opacity: .45; }
+.task-prediction-hint { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; color: #986039; font-size: 11px; line-height: 1.4; }
+.experiment-report-card { border-color: #d7cba8 !important; background: linear-gradient(145deg, rgba(255, 252, 241, .98), rgba(255, 255, 255, .9)); }
+.report-fields { display: grid; gap: 6px; }
+.report-field { display: grid; grid-template-columns: 92px 1fr; gap: 7px; padding: 7px 8px; border-radius: 7px; background: #fffdf4; color: #635b48; font-size: 10px; line-height: 1.45; }
+.report-field b { color: #8a6d32; }
+.report-edit { display: grid; gap: 4px; margin-top: 8px; color: #725f37; font-size: 10px; font-weight: 700; }
+.report-edit textarea { width: 100%; resize: vertical; min-height: 42px; padding: 7px 8px; border: 1px solid #e5d9b8; border-radius: 7px; background: #fffef9; color: #5c5039; font: inherit; font-size: 11px; line-height: 1.4; }
+.report-note { margin: 9px 0 0; color: #7b704f; font-size: 10px; line-height: 1.45; }
+.baseline-card { border-color: #b5c9e0 !important; background: linear-gradient(145deg, rgba(246, 250, 255, .96), rgba(255, 255, 255, .9)); }
+.baseline-card.complete { border-color: #83bf9d !important; background: linear-gradient(145deg, rgba(243, 252, 247, .98), rgba(255, 255, 255, .9)); }
+.baseline-copy { margin: 0 0 11px; color: #516d7c; font-size: 12px; line-height: 1.55; }
+.baseline-status { display: grid; grid-template-columns: 22px 1fr; gap: 5px 7px; align-items: center; margin-bottom: 11px; color: #5c7180; font-size: 11px; }
+.baseline-status span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #d9e5ef; color: #5e7587; font-weight: 800; }
+.baseline-status span.done { background: #55a97b; color: #fff; }
+.baseline-button { width: 100%; min-height: 42px; border: 1px solid #709bb7; border-radius: 8px; background: #eaf4fb; color: #245b77; font-size: 12px; font-weight: 800; }
+.baseline-button:hover:not(:disabled) { background: #dceef9; }
+.baseline-button:disabled { cursor: not-allowed; opacity: .55; }
+.lock-note { display: flex; align-items: flex-start; gap: 6px; margin: 9px 0 0; color: #3d7860; font-size: 11px; line-height: 1.45; }
+.variable-role-strip { display: grid; gap: 5px; margin: -4px 0 12px; padding: 8px 9px; border-left: 3px solid #79b7a0; border-radius: 0 7px 7px 0; background: #f2f8f4; }
+.variable-role-strip .role { display: grid; grid-template-columns: 74px 1fr; gap: 6px; color: #587269; font-size: 10px; line-height: 1.35; }
+.variable-role-strip .role b { font-size: 9px; letter-spacing: .02em; }
+.variable-role-strip .role.manipulated b { color: #bb5c3f; }
+.variable-role-strip .role.response b { color: #2579a0; }
+.variable-role-strip .role.control b { color: #648477; }
+.experiment-record-card, .guided-questions-card { border-color: #d0ded7 !important; }
+.record-table-wrap { overflow-x: auto; margin: 0 -3px; }
+.experiment-record-table { width: 100%; min-width: 475px; border-collapse: collapse; font-size: 10px; }
+.experiment-record-table th { padding: 7px 6px; background: #edf5f0; color: #517164; font-size: 9px; text-align: left; white-space: nowrap; }
+.experiment-record-table td { padding: 8px 6px; border-bottom: 1px solid #e0ebe5; color: #4f675c; white-space: nowrap; }
+.experiment-record-table .baseline-row td { background: #f3f8fc; color: #3e6477; font-weight: 700; }
+.record-table-note { margin: 9px 0 0; color: #6b8177; font-size: 10px; line-height: 1.45; }
+.guided-question-list { display: grid; gap: 9px; }
+.guided-question-list label { display: grid; gap: 4px; }
+.guided-question-list label > span { color: #48665a; font-size: 11px; font-weight: 700; }
+.guided-question-list textarea { width: 100%; resize: vertical; min-height: 42px; padding: 7px 8px; border: 1px solid #d6e4dd; border-radius: 7px; background: #fcfefd; color: #244c3e; font: inherit; font-size: 11px; line-height: 1.4; }
+.guided-question-list textarea:focus { border-color: #4b9b78; outline: 2px solid rgba(75,155,120,.2); }
+.analysis-button { width: 100%; min-height: 38px; margin-top: 10px; border: 1px solid #6fae93; border-radius: 7px; background: #eaf6ef; color: #286849; font-size: 11px; font-weight: 800; }
+.system-analysis { margin-top: 9px; padding: 10px; border-radius: 8px; background: #f1f8f4; color: #4b695b; font-size: 11px; line-height: 1.55; }
+.system-analysis strong { color: #1d684b; }
+.system-analysis p { margin: 5px 0 0; }
+.dark-theme .experiment-task-card, .dark-theme .baseline-card, .dark-theme .experiment-record-card, .dark-theme .guided-questions-card { background: #1d382e; border-color: #6e9b83 !important; }
+.dark-theme .learning-modules { border-color: #668678; background: #1b342b; }
+.dark-theme .learning-modules-heading h2, .dark-theme .learning-mode-options button b { color: #eff9f4; }
+.dark-theme .learning-modules-heading p, .dark-theme .learning-modules-heading > span, .dark-theme .learning-mode-options button small { color: #c5ddd1; }
+.dark-theme .learning-modules-heading > span { background: #315c47; }
+.dark-theme .learning-mode-options button { border-color: #668678; background: #274438; color: #edf7f2; }
+.dark-theme .learning-mode-options button.selected { border-color: #9ce0b8; background: #315c47; }
+.dark-theme .task-question, .dark-theme .task-details b, .dark-theme .variable-role-strip .role.manipulated b, .dark-theme .system-analysis strong { color: #c1efd1; }
+.dark-theme .task-details, .dark-theme .variable-role-strip, .dark-theme .system-analysis { background: #29483a; }
+.dark-theme .task-details, .dark-theme .task-level, .dark-theme .task-prediction-hint, .dark-theme .baseline-copy, .dark-theme .baseline-status, .dark-theme .variable-role-strip .role, .dark-theme .guided-question-list label > span, .dark-theme .record-table-note { color: #c5ddd1; }
+.dark-theme .task-options button, .dark-theme .guided-question-list textarea { border-color: #668678; background: #274438; color: #edf7f2; }
+.dark-theme .report-note { color: #d0dfd7; }
+.dark-theme .report-field, .dark-theme .report-edit textarea { border-color: #668678; background: #274438; color: #edf7f2; }
+.dark-theme .experiment-report-card { background: #1d382e; border-color: #789889 !important; }
+.dark-theme .report-field b, .dark-theme .report-edit { color: #c9efd4; }
+.dark-theme .task-options button.selected, .dark-theme .analysis-button { background: #315c47; color: #effff5; }
+.dark-theme .baseline-button { border-color: #83b0c5; background: #294d5e; color: #e2f5ff; }
+.dark-theme .parameter-locked::after { background: #355044; color: #c5ddd1; }
+.dark-theme .experiment-record-table th { background: #29483a; color: #c5ddd1; }
+.dark-theme .experiment-record-table td { border-color: #466655; color: #d1e6db; }
+.dark-theme .experiment-record-table .baseline-row td { background: #294554; color: #d9f2ff; }
+.high-contrast .experiment-task-card, .high-contrast .baseline-card, .high-contrast .experiment-record-card, .high-contrast .guided-questions-card { border-width: 2px !important; }
+
+@media (max-width: 760px) {
+  .experiment-steps { grid-template-columns: repeat(5, minmax(48px, 1fr)); overflow-x: auto; }
+  .learning-modules { padding: 12px; }
+  .learning-modules-heading { display: grid; gap: 7px; }
+  .learning-modules-heading > span { justify-self: start; }
+  .learning-mode-options { grid-template-columns: 1fr; }
+  .experiment-steps button { min-height: 46px; font-size: 10px; }
+  .task-question { font-size: 15px; }
+  .task-options { grid-template-columns: 1fr; }
+  .task-options button { min-height: 42px; font-size: 12px; }
+  .variable-role-strip .role { font-size: 11px; }
+  .variable-role-strip .role b { font-size: 10px; }
+  .experiment-record-table { font-size: 11px; }
+  .experiment-record-table th { font-size: 10px; }
 }
 
 /* Give the experiment controls more room and make their labels easier to scan. */

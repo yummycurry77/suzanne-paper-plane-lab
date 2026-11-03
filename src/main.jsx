@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { createFlightPhysics } from './flightPhysics.js';
 import { COIN_CHALLENGE_ATTEMPTS, COIN_LANES, COIN_TARGETS } from './coinChallenge.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ArrowUpRight, Brain, Camera, CheckCircle2, ChevronDown, CloudRain, Coins, Contrast, Crosshair, Eye, EyeOff, Gauge, Info, Moon, Pause, Play, Plane, Rewind, RotateCcw, Scale, StepForward, Sun, Wind, X } from 'lucide-react';
+import { ArrowUpRight, Brain, Camera, CheckCircle2, ChevronDown, ClipboardList, CloudRain, Coins, Contrast, Crosshair, Eye, EyeOff, Gauge, Info, Lock, MessageCircleQuestion, Moon, Pause, Play, Plane, Rewind, RotateCcw, Scale, StepForward, Sun, Wind, X } from 'lucide-react';
 import './styles.css';
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -13,9 +13,9 @@ const WORLD_Y_SCALE = 1.1;
 const WORLD_Z_SCALE = 1.35;
 const DEFAULT_WING_AREA = 0.03;
 const WING_AREA_OPTIONS = [
-  { value: 0.024, label: '小型', area: '0.024 m²' },
+  { value: 0.016, label: '小型', area: '0.016 m²' },
   { value: DEFAULT_WING_AREA, label: '中型', area: '0.030 m²' },
-  { value: 0.036, label: '大型', area: '0.036 m²' }
+  { value: 0.050, label: '大型', area: '0.050 m²' }
 ];
 const PAPER_TYPES = [
   { value: 'white', label: '影印紙', mass: '5.0 g', description: '標準重量與硬度，作為比較用的均衡基準。', color: '#f8fbf8', roughness: 0.72, fold: '#92aaa1' },
@@ -29,6 +29,31 @@ const EXPERIMENT_GOALS = [
   { value: 'wind', label: '測試抗風' },
   { value: 'balance', label: '比較配重' }
 ];
+const EXPERIMENT_TASKS = [
+  {
+    value: 'windDistance', label: '風速與飛行距離', question: '風速變大會讓飛行距離增加嗎？', variableLabel: '風速', variableKeys: ['wind'], response: '飛行距離、側偏距離', controls: '紙張、配重、投擲力道、投擲角度', prediction: '距離增加或減少'
+  },
+  {
+    value: 'weightStability', label: '配重與穩定度', question: '配重的數量或位置，哪一種改變更能提升穩定度？', variableLabel: '配重數量或位置（擇一）', variableKeys: ['clipCount', 'clipPosition'], response: '側偏距離、穩定度、側傾', controls: '風速、紙張、另一種配重設定、投擲方式', prediction: '側偏減少或增加'
+  },
+  {
+    value: 'angleStall', label: '投擲角度與失速', question: '投擲角度太大會不會失速？', variableLabel: '投擲角度', variableKeys: ['throwAngle'], response: '最高高度、飛行距離、失速事件', controls: '風速、配重、紙張、投擲力道', prediction: '高度增加但距離可能減少'
+  },
+  {
+    value: 'wingAirtime', label: '翼面積與滯空時間', question: '翼面積變大一定會飛更久嗎？', variableLabel: '翼面積', variableKeys: ['wingArea'], response: '滯空時間、最高高度', controls: '風速、配重、紙張、投擲角度', prediction: '滯空時間增加或減少'
+  },
+  {
+    value: 'crosswindDeviation', label: '側風與落點偏移', question: '側風會讓飛機往哪裡偏？', variableLabel: '風向', variableKeys: ['windDirection'], response: '側偏距離、側傾', controls: '風速、紙張、配重、投擲方式', prediction: '側偏增加或減少'
+  }
+];
+const PRIMARY_VARIABLE_KEYS = ['wind', 'windDirection', 'clipPosition', 'clipCount', 'clipPlacement', 'throwAngle', 'throwPower', 'wingArea', 'paperTone'];
+const VARIABLE_ROLE_LABELS = { manipulated: '操縱變因', response: '應變變因', control: '控制變因' };
+const SCENARIO_EXPLANATIONS = {
+  noseHeavy: { focus: '觀察重點：機頭是否下沉？', reason: '可能原因：重心太靠前。', try: '可以嘗試：把配重往後移一格。' },
+  leftHeavy: { focus: '觀察重點：飛機是否向左側傾？', reason: '可能原因：左右機翼受力不平衡。', try: '可以嘗試：改成左右對稱配重。' },
+  typhoon: { focus: '觀察重點：側傾和側偏是否突然變大？', reason: '可能原因：強風與亂流同時增加。', try: '可以嘗試：降低風速或增加穩定配重。' },
+  gust: { focus: '觀察重點：陣風來襲後姿態怎麼變？', reason: '可能原因：短時間風力脈衝改變受力。', try: '可以嘗試：固定投擲角度，只改陣風強度。' }
+};
 const CAMERA_MODE_OPTIONS = [
   { value: 'side', label: '側視', detail: '從側面觀察高度與飛行弧線', icon: Crosshair },
   { value: 'follow', label: '跟隨', detail: '鏡頭跟著紙飛機移動', icon: Plane },
@@ -36,6 +61,25 @@ const CAMERA_MODE_OPTIONS = [
   { value: 'free', label: '環視', detail: '自由旋轉、縮放，也可用 WASD', icon: RotateCcw }
 ];
 const clipMultiplier = placement => placement === 'both' ? 2 : 1;
+
+function snapshotSettings(settings, paperTone) {
+  return { ...settings, paperTone };
+}
+
+function getChangedVariableKeys(base, current) {
+  if (!base || !current) return [];
+  return PRIMARY_VARIABLE_KEYS.filter(key => base[key] !== current[key]);
+}
+
+function describeVariableChange(base, current, paperTone) {
+  const changed = getChangedVariableKeys(base, { ...current, paperTone });
+  if (!changed.length) return '尚未改變條件';
+  const labels = {
+    wind: '風速', windDirection: '風向', clipPosition: '配重位置', clipCount: '配重數量', clipPlacement: '配重側別',
+    throwAngle: '投擲角度', throwPower: '投擲力道', wingArea: '翼面積', paperTone: '紙張'
+  };
+  return changed.map(key => labels[key] ?? key).join('、');
+}
 
 function getCg(settings) {
   if (settings.clipCount === 0) return 37;
@@ -1275,18 +1319,99 @@ function updateTrail(state, point) {
   state.pathLine.geometry.setDrawRange(0, count + 1);
 }
 
-function Slider({ label, value, min, max, step = 1, unit, tone = 'coral', hint, onChange }) {
+function Slider({ label, value, min, max, step = 1, unit, tone = 'coral', hint, onChange, disabled = false }) {
   const range = max - min || 1;
   const progress = clamp(((value - min) / range) * 100, 0, 100);
   const marks = [min, min + range / 2, max];
   return (
-    <label className="slider-row">
+    <label className={`slider-row ${disabled ? 'parameter-control-locked' : ''}`}>
       <span>{label}<strong>{value}{unit}</strong></span>
-      <input className={`range-input ${tone}`} type="range" min={min} max={max} step={step} value={value} style={{ '--range-progress': `${progress}%` }} onChange={e => onChange(Number(e.target.value))} />
+      <input disabled={disabled} className={`range-input ${tone}`} type="range" min={min} max={max} step={step} value={value} style={{ '--range-progress': `${progress}%` }} onChange={e => onChange(Number(e.target.value))} />
       <span className="slider-ticks" aria-hidden="true">{marks.map((mark, index) => <small key={index}>{Number.isInteger(mark) ? mark : mark.toFixed(1)}{unit}</small>)}</span>
       {hint && <small className="slider-hint">{hint}</small>}
     </label>
   );
+}
+
+function VariableRoleStrip({ task, section }) {
+  if (!task) return null;
+  const sectionKeys = {
+    plane: ['clipPosition', 'clipCount', 'clipPlacement', 'wingArea', 'paperTone'],
+    throw: ['throwAngle', 'throwPower', 'initialHeight'],
+    wind: ['wind', 'windDirection', 'weather', 'gustStrength', 'turbulence', 'gustDelay']
+  }[section] ?? [];
+  const isManipulated = task.variableKeys.some(key => sectionKeys.includes(key));
+  const sectionLabel = section === 'plane' ? '紙飛機參數' : section === 'throw' ? '投擲參數' : '風場參數';
+  return <div className="variable-role-strip" aria-label={`${sectionLabel}的變因角色`}>
+    <span className={isManipulated ? 'role manipulated' : 'role control'}><b>{isManipulated ? VARIABLE_ROLE_LABELS.manipulated : VARIABLE_ROLE_LABELS.control}</b>{isManipulated ? task.variableLabel : sectionLabel}</span>
+    <span className="role response"><b>{VARIABLE_ROLE_LABELS.response}</b>{task.response}</span>
+    <span className="role control"><b>{VARIABLE_ROLE_LABELS.control}</b>{isManipulated ? task.controls : task.variableLabel}</span>
+  </div>;
+}
+
+function ExperimentTaskCard({ tasks, selected, onSelect, locked }) {
+  const task = tasks.find(item => item.value === selected) ?? tasks[0];
+  return <section className="setting-card experiment-task-card" id="task-step">
+    <div className="task-card-heading"><h2><MessageCircleQuestion size={16} />實驗任務</h2><span className="task-level">先選問題，再開始調整</span></div>
+    <p className="task-question">{task.question}</p>
+    <div className="task-details">
+      <span><b>建議改變</b>{task.variableLabel}</span>
+      <span><b>觀察數據</b>{task.response}</span>
+      <span><b>先固定</b>{task.controls}</span>
+    </div>
+    <div className="task-options" role="group" aria-label="選擇實驗任務">
+      {tasks.map(item => <button key={item.value} type="button" className={item.value === selected ? 'selected' : ''} aria-pressed={item.value === selected} disabled={locked && item.value !== selected} onClick={() => onSelect(item.value)}>{item.label}</button>)}
+    </div>
+    <p className="task-prediction-hint"><Brain size={14} />預測提示：{task.prediction}</p>
+  </section>;
+}
+
+function ExperimentRecordTable({ records, baselineResult }) {
+  if (!records.length) return null;
+  return <section className="setting-card experiment-record-card" aria-labelledby="experiment-record-title">
+    <div className="task-card-heading"><h2 id="experiment-record-title"><ClipboardList size={16} />實驗紀錄表</h2><span className="task-level">每次落地自動新增</span></div>
+    <div className="record-table-wrap"><table className="experiment-record-table"><thead><tr><th>次數</th><th>改變的變因</th><th>距離</th><th>高度</th><th>滯空</th><th>側偏</th></tr></thead><tbody>{records.map(row => <tr key={row.id} className={row.isBaseline ? 'baseline-row' : ''}><td>{row.isBaseline ? '基準' : row.attempt}</td><td>{row.variable}</td><td>{row.distance.toFixed(1)}m</td><td>{row.peak.toFixed(1)}m</td><td>{row.airtime.toFixed(1)}s</td><td>{Math.abs(row.deviation).toFixed(1)}m</td></tr>)}</tbody></table></div>
+    {baselineResult && <p className="record-table-note">基準列是後續比較的起點；每次只改一項，結論才容易歸因。</p>}
+  </section>;
+}
+
+function GuidedQuestions({ task, result, comparison, answers, onAnswer, showAnalysis, onToggleAnalysis }) {
+  if (!result) return null;
+  const prompts = [
+    ['changed', '哪個條件改變最多？'],
+    ['result', `${task.response}有沒有朝你預測的方向變化？`],
+    ['observation', '飛機什麼時候開始晃動、失速或偏移？'],
+    ['next', '如果再做一次，你會改哪個參數？']
+  ];
+  const analysis = comparison
+    ? `${task.variableLabel}改變後，距離${comparison.distance >= 0 ? '增加' : '減少'} ${Math.abs(comparison.distance).toFixed(1)} m，最高高度${comparison.peak >= 0 ? '增加' : '減少'} ${Math.abs(comparison.peak).toFixed(1)} m；側偏${comparison.deviation >= 0 ? '變大' : '變小'} ${Math.abs(comparison.deviation).toFixed(1)} m。請把這些數據和你的觀察連在一起。`
+    : result.verdict;
+  return <section className="setting-card guided-questions-card" aria-labelledby="guided-questions-title">
+    <div className="task-card-heading"><h2 id="guided-questions-title"><MessageCircleQuestion size={16} />結果引導問題</h2><span className="task-level">先寫觀察，再看分析</span></div>
+    <div className="guided-question-list">{prompts.map(([key, prompt]) => <label key={key}><span>{prompt}</span><textarea value={answers[key] ?? ''} onChange={event => onAnswer(key, event.target.value)} placeholder="寫下你的觀察…" rows={2} /></label>)}</div>
+    <button className="analysis-button" type="button" onClick={onToggleAnalysis}>{showAnalysis ? '收起系統分析' : '顯示系統分析'}</button>
+    {showAnalysis && <div className="system-analysis"><strong>系統分析</strong><p>{analysis}</p><p>結論可以寫成：「我改變了{task.variableLabel}，並固定{task.controls}；結果顯示{task.response}的變化是……」</p></div>}
+  </section>;
+}
+
+function ExperimentReport({ task, baselineResult, result, predictionSummary, answers, reportFields, onReportFieldChange }) {
+  if (!result) return null;
+  const report = [
+    ['研究問題', task.question],
+    ['我改變的變因', task.variableLabel],
+    ['我固定的條件', task.controls],
+    ['我的預測', reportFields.prediction || predictionSummary?.expected || answers.result || '尚未填寫'],
+    ['實驗結果', `距離 ${result.distance.toFixed(1)} m、最高高度 ${result.peak.toFixed(1)} m、滯空 ${result.airtime.toFixed(1)} s、側偏 ${Math.abs(result.deviation).toFixed(1)} m`],
+    ['我的結論', reportFields.conclusion || answers.observation || '請根據紀錄表寫下結論'],
+    ['下一次想改進的地方', reportFields.next || answers.next || '尚未填寫']
+  ];
+  return <section className="setting-card experiment-report-card" aria-labelledby="experiment-report-title">
+    <div className="task-card-heading"><h2 id="experiment-report-title"><ClipboardList size={16} />實驗報告</h2><span className="task-level">可直接整理成作業</span></div>
+    <div className="report-fields">{report.map(([label, value]) => <div key={label} className="report-field"><b>{label}</b><span>{value}</span></div>)}</div>
+    <label className="report-edit"><span>補充結論</span><textarea value={reportFields.conclusion ?? ''} onChange={event => onReportFieldChange('conclusion', event.target.value)} placeholder="因為……所以……" rows={2} /></label>
+    <label className="report-edit"><span>下一次改進</span><textarea value={reportFields.next ?? ''} onChange={event => onReportFieldChange('next', event.target.value)} placeholder="下一次我會……" rows={2} /></label>
+    {baselineResult && <p className="report-note">報告中的數據來自基準與後續紀錄；請用紀錄表核對每一列。</p>}
+  </section>;
 }
 
 function FlightChart({ result, previousResult }) {
@@ -1376,7 +1501,7 @@ function App() {
   const [stepRequest, setStepRequest] = useState({ id: 0 });
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [activeScenario, setActiveScenario] = useState(null);
-  const [activeStep, setActiveStep] = useState('plane');
+  const [activeStep, setActiveStep] = useState('task');
   const [sceneTheme, setSceneTheme] = useState('light');
   const [highContrast, setHighContrast] = useState(true);
   const [paperTone, setPaperTone] = useState('white');
@@ -1386,7 +1511,42 @@ function App() {
   const [replaySeek, setReplaySeek] = useState({ id: 0, progress: 0 });
   const [coinChallenge, setCoinChallenge] = useState(createCoinChallengeState);
   const [coinChallengeResetId, setCoinChallengeResetId] = useState(0);
+  const [selectedTask, setSelectedTask] = useState('windDistance');
+  const [learningMode, setLearningMode] = useState('none');
+  const [fairTestMode, setFairTestMode] = useState(false);
+  const [baselineSettings, setBaselineSettings] = useState(null);
+  const [baselineResult, setBaselineResult] = useState(null);
+  const [experimentRecords, setExperimentRecords] = useState([]);
+  const [experimentWarning, setExperimentWarning] = useState(null);
+  const [guidedAnswers, setGuidedAnswers] = useState({});
+  const [showSystemAnalysis, setShowSystemAnalysis] = useState(false);
+  const [reportFields, setReportFields] = useState({});
   const isReplayPlaying = isAnimating && flightRequest.mode === 'replay';
+  const activeTask = EXPERIMENT_TASKS.find(task => task.value === selectedTask) ?? EXPERIMENT_TASKS[0];
+  const isExperimentMode = learningMode === 'experiment';
+  const baselinePending = isExperimentMode && Boolean(baselineSettings && !baselineResult);
+  const changedVariableKeys = getChangedVariableKeys(baselineSettings, snapshotSettings(settings, paperTone));
+  const candidateVariableKeys = activeTask.variableKeys;
+  const changedCandidateKeys = changedVariableKeys.filter(key => candidateVariableKeys.includes(key));
+  const committedVariableKey = changedCandidateKeys[0] ?? null;
+  const activeVariableKey = committedVariableKey ?? candidateVariableKeys[0];
+  const activeVariableLabel = committedVariableKey === 'clipCount'
+    ? '配重數量'
+    : committedVariableKey === 'clipPosition'
+      ? '配重位置'
+      : activeTask.variableLabel;
+  const displayTask = activeVariableLabel === activeTask.variableLabel
+    ? activeTask
+    : { ...activeTask, variableLabel: activeVariableLabel };
+  const hasModifiedVariable = isExperimentMode && Boolean(baselineResult && changedCandidateKeys.length);
+  const sectionVariableKeys = {
+    plane: ['clipPosition', 'clipCount', 'clipPlacement', 'wingArea', 'paperTone'],
+    throw: ['throwAngle', 'throwPower', 'initialHeight'],
+    wind: ['wind', 'windDirection', 'weather', 'gustStrength', 'turbulence', 'gustDelay']
+  };
+  const isSectionLocked = section => isExperimentMode && Boolean(!baselineResult || (fairTestMode && !candidateVariableKeys.some(key => sectionVariableKeys[section].includes(key))));
+  const isSectionFocused = section => isExperimentMode && Boolean(baselineResult && fairTestMode && candidateVariableKeys.some(key => sectionVariableKeys[section].includes(key)));
+  const isVariableLocked = key => isExperimentMode && Boolean(!baselineResult || (fairTestMode && (!candidateVariableKeys.includes(key) || (committedVariableKey && committedVariableKey !== key))));
 
   useEffect(() => {
     if (!flightEvent) return undefined;
@@ -1437,6 +1597,7 @@ function App() {
   }, [coinChallenge.finished]);
   const startCoinChallenge = () => {
     if (isAnimating) return;
+    setLearningMode('coin');
     setCoinChallenge({ ...createCoinChallengeState(), active: true });
     setCoinChallengeResetId(id => id + 1);
     setResult(null);
@@ -1449,7 +1610,24 @@ function App() {
     setFlightEvent({ label: '金幣挑戰開始', detail: '調整投擲角度與力道，三次內盡量吃到更多金幣。', tone: 'peak' });
     setActiveStep('flight');
   };
+  const canEditVariable = key => {
+    if (isAnimating) return false;
+    if (isExperimentMode && !baselineSettings) {
+      setExperimentWarning('請先建立基準，完成基準試飛後才能調整實驗變因。');
+      return false;
+    }
+    if (isExperimentMode && baselinePending) {
+      setExperimentWarning('基準試飛尚未完成，請先用目前條件完成基準試飛。');
+      return false;
+    }
+    if (isExperimentMode && fairTestMode && baselineResult && PRIMARY_VARIABLE_KEYS.includes(key) && (!candidateVariableKeys.includes(key) || (committedVariableKey && committedVariableKey !== key))) {
+      setExperimentWarning(`公平測試已鎖定這個參數。目前只檢查「${activeVariableLabel}」。`);
+      return false;
+    }
+    return true;
+  };
   const update = (key, value) => {
+    if (!canEditVariable(key)) return;
     setSettings(current => ({ ...current, [key]: value }));
     if (['clipPlacement', 'clipCount', 'clipPosition', 'wingArea'].includes(key)) setActiveStep('plane');
     if (['throwAngle', 'throwPower', 'initialHeight'].includes(key)) setActiveStep('throw');
@@ -1459,6 +1637,18 @@ function App() {
     }
     setPrediction(null);
     setPredictionFeedback(null);
+    setExperimentWarning(isExperimentMode && baselineResult && candidateVariableKeys.includes(key)
+      ? `已修改${key === 'clipCount' ? '配重數量' : key === 'clipPosition' ? '配重位置' : activeVariableLabel}，可以先選擇預測再試飛。`
+      : null);
+  };
+  const updatePaperTone = value => {
+    if (!canEditVariable('paperTone')) return;
+    setPaperTone(value);
+    setPrediction(null);
+    setPredictionFeedback(null);
+    setExperimentWarning(isExperimentMode && baselineResult && candidateVariableKeys.includes('paperTone')
+      ? `已修改${activeVariableLabel}，可以先選擇預測再試飛。`
+      : null);
   };
   const liveCg = getCg(settings);
   const liveStability = clamp(1 - Math.abs(liveCg - 30) / 24, 0.35, 1);
@@ -1478,8 +1668,31 @@ function App() {
     stability: result.stability - previousResult.stability
   } : null;
 
+  const appendExperimentRecord = (next, isBaseline = false) => {
+    const currentSnapshot = snapshotSettings(settings, paperTone);
+    const changedVariable = isBaseline ? '基準條件' : describeVariableChange(baselineSettings, currentSnapshot, paperTone);
+    setExperimentRecords(records => [...records, {
+      id: `${Date.now()}-${records.length}`,
+      attempt: records.filter(row => !row.isBaseline).length + 1,
+      isBaseline,
+      variable: changedVariable,
+      distance: next.distance,
+      peak: next.peak,
+      airtime: next.airtime,
+      deviation: next.deviation
+    }]);
+  };
+
   const handleResult = next => {
-    if (result && !coinChallenge.active) {
+    if (isExperimentMode && baselinePending && !coinChallenge.active) {
+      setBaselineResult(next);
+      setFairTestMode(true);
+      appendExperimentRecord(next, true);
+      setPrediction(null);
+      setPredictionFeedback(null);
+      setPredictionSummary(null);
+      setExperimentWarning('基準已建立。現在只改變一項「' + (candidateVariableKeys.length > 1 ? `${activeTask.variableLabel}` : activeVariableLabel) + '」，再先做預測。');
+    } else if (isExperimentMode && result && !coinChallenge.active) {
       setPreviousResult(result);
       const correct = prediction === 'farther'
         ? next.distance > result.distance + 0.01
@@ -1500,13 +1713,65 @@ function App() {
             ? `側偏 ${Math.abs(next.deviation) - Math.abs(result.deviation) >= 0 ? '+' : ''}${(Math.abs(next.deviation) - Math.abs(result.deviation)).toFixed(1)} m`
             : `滯空 ${next.airtime - result.airtime >= 0 ? '+' : ''}${(next.airtime - result.airtime).toFixed(1)} s`;
       setPredictionSummary({ expected, actual, correct });
+      appendExperimentRecord(next);
       setPrediction(null);
+    } else if (result && !coinChallenge.active) {
+      setPreviousResult(result);
+      setPrediction(null);
+      setPredictionFeedback(null);
+      setPredictionSummary(null);
     }
     setResult(next);
   };
 
+  const selectExperimentTask = value => {
+    if (isAnimating || baselinePending) {
+      setExperimentWarning('基準試飛進行中，完成後才能更換實驗任務。');
+      return;
+    }
+    setSelectedTask(value);
+    setLearningMode('experiment');
+    setActiveStep('task');
+    setBaselineSettings(null);
+    setBaselineResult(null);
+    setFairTestMode(false);
+    setExperimentRecords([]);
+    setResult(null);
+    setPreviousResult(null);
+    setPrediction(null);
+    setPredictionFeedback(null);
+    setPredictionSummary(null);
+    setExperimentWarning(null);
+    setGuidedAnswers({});
+    setShowSystemAnalysis(false);
+    setReportFields({});
+  };
+
+  const establishBaseline = () => {
+    if (isAnimating) return;
+    setLearningMode('experiment');
+    setBaselineSettings(snapshotSettings(settings, paperTone));
+    setBaselineResult(null);
+    setFairTestMode(false);
+    setExperimentRecords([]);
+    setResult(null);
+    setPreviousResult(null);
+    setPrediction(null);
+    setPredictionFeedback(null);
+    setPredictionSummary(null);
+    setGuidedAnswers({});
+    setShowSystemAnalysis(false);
+    setReportFields({});
+    setExperimentWarning('基準條件已保存，請按「基準試飛」完成第一筆資料。');
+    setActiveStep('flight');
+  };
+
   const launch = () => {
-    if (isAnimating || (coinChallenge.active ? coinChallenge.finished : Boolean(result && !prediction))) return;
+    if (isAnimating || (coinChallenge.active ? coinChallenge.finished : Boolean((isExperimentMode && !baselineSettings) || (isExperimentMode && result && !prediction && !baselinePending)))) return;
+    if (!coinChallenge.active && isExperimentMode && fairTestMode && baselineResult && !getChangedVariableKeys(baselineSettings, snapshotSettings(settings, paperTone)).length) {
+      setExperimentWarning(`請先改變「${activeVariableLabel}」，再進行比較試飛。`);
+      return;
+    }
     if (coinChallenge.active) {
       setCoinChallenge(current => ({ ...current, currentFlightScore: 0 }));
     }
@@ -1515,6 +1780,7 @@ function App() {
   };
 
   const goToStep = step => {
+    if (step === 'task') setLearningMode('experiment');
     setActiveStep(step);
     if (step === 'flight') {
       document.querySelector('.flight-actions .launch')?.focus({ preventScroll: true });
@@ -1538,6 +1804,7 @@ function App() {
   };
 
   const setWindDirection = windDirection => {
+    if (!canEditVariable('windDirection')) return;
     setActiveStep('wind');
     setActiveScenario(null);
     setSettings(current => ({
@@ -1548,9 +1815,11 @@ function App() {
     setPrediction(null);
     setPredictionFeedback(null);
     setPredictionSummary(null);
+    setExperimentWarning(null);
   };
 
   const setWeatherMode = weather => {
+    if (!canEditVariable('weather')) return;
     setActiveStep('wind');
     setActiveScenario(null);
     setSettings(current => ({
@@ -1561,9 +1830,18 @@ function App() {
     setPrediction(null);
     setPredictionFeedback(null);
     setPredictionSummary(null);
+    setExperimentWarning(null);
   };
 
   const applyScenario = scenario => {
+    if (baselinePending) {
+      setExperimentWarning('基準試飛尚未完成，請先完成目前這組條件，再調整情境。');
+      return;
+    }
+    if (fairTestMode && baselineResult) {
+      setExperimentWarning('公平測試模式會鎖定快速情境，避免一次改變多個變因。');
+      return;
+    }
     setActiveStep('wind');
     const scenarios = {
       baseline: { weather: 'clear', windDirection: 'front', wind: 0, gustStrength: 0.15, turbulence: 0.1, clipPlacement: 'body', clipCount: 1, clipPosition: 22 },
@@ -1578,6 +1856,7 @@ function App() {
     setSettings(current => ({ ...current, ...scenarios[scenario] }));
     setPrediction(null);
     setPredictionFeedback(null);
+    setExperimentWarning(null);
   };
 
   const setClipFromPointer = (clientX, element) => {
@@ -1588,7 +1867,17 @@ function App() {
 
   const reset = () => {
     setActiveScenario(null);
-    setActiveStep('plane');
+    setSelectedTask('windDistance');
+    setLearningMode('none');
+    setFairTestMode(false);
+    setBaselineSettings(null);
+    setBaselineResult(null);
+    setExperimentRecords([]);
+    setExperimentWarning(null);
+    setGuidedAnswers({});
+    setShowSystemAnalysis(false);
+    setReportFields({});
+    setActiveStep('task');
     setSettings({ goal: 'far', clipCount: 1, clipPosition: 22, clipPlacement: 'body', wingArea: DEFAULT_WING_AREA, throwAngle: 10, throwPower: 70, initialHeight: 1.35, wind: 0, windDirection: 'front', gustStrength: 0.35, turbulence: 0.2, gustDelay: 1.1, wingSoftness: 0.25, weather: 'clear' });
     setResult(null);
     setPreviousResult(null);
@@ -1674,72 +1963,100 @@ function App() {
         </div>
 
         <nav className="experiment-steps" aria-label="實驗流程">
-          {[['plane', '紙飛機'], ['throw', '投擲'], ['wind', '風場'], ['flight', '試飛']].map(([step, label], index) => (
+          {[['task', '任務'], ['plane', '紙飛機'], ['throw', '投擲'], ['wind', '風場'], ['flight', '試飛']].map(([step, label], index) => (
             <button key={step} type="button" className={activeStep === step ? 'active' : ''} aria-current={activeStep === step ? 'step' : undefined} onClick={() => goToStep(step)}>
               <span>{String(index + 1).padStart(2, '0')}</span>{label}
             </button>
           ))}
         </nav>
-        <p className={`setup-status ${result && !prediction ? 'needs-action' : ''}`}>
-          {result && !prediction ? <Info size={14} /> : <CheckCircle2 size={14} />}
-          {result && !prediction ? '還差一步：選擇你的預測' : result ? '預測完成，準備比較下一次飛行' : '基本設定已就緒，可以建立基準試飛'}
+        <p className={`setup-status ${isExperimentMode && (result && !prediction || experimentWarning) ? 'needs-action' : ''}`}>
+          {isExperimentMode && result && !prediction ? <Info size={14} /> : <CheckCircle2 size={14} />}
+          {isExperimentMode
+            ? (experimentWarning ?? (hasModifiedVariable && !prediction ? `已修改${activeVariableLabel}，請先選擇預測再試飛` : result && !prediction ? '還差一步：選擇你的預測' : hasModifiedVariable ? `已修改${activeVariableLabel}，可以試飛` : result ? '預測完成，準備比較下一次飛行' : '選擇任務後建立基準，開始公平測試'))
+            : '一般模擬模式：可以直接調整參數並試飛'}
         </p>
 
-        <section className={`setting-card coin-challenge-card ${coinChallenge.active ? 'active' : ''}`}>
-          <h2><Coins size={16} />三次投擲金幣挑戰</h2>
-          <p className="coin-challenge-intro">場景中有上下兩道金幣拋物線；調整投擲角度與力道，三次內吃到越多越好。</p>
-          <div className="coin-scoreboard" aria-label="金幣挑戰進度">
-            <div><span>吃到金幣</span><strong>{coinChallenge.score}<small> / {COIN_TARGETS.length}</small></strong></div>
-            <div><span>投擲次數</span><strong>{coinChallenge.attempts}<small> / {COIN_CHALLENGE_ATTEMPTS}</small></strong></div>
-            <div><span>上次吃到</span><strong>{coinChallenge.lastFlightScore}<small> 枚</small></strong></div>
+        <section className="learning-modules" aria-labelledby="learning-modules-title">
+          <div className="learning-modules-heading">
+            <div><h2 id="learning-modules-title"><MessageCircleQuestion size={17} />教學模式</h2><p>先選一種玩法；細節會在這裡展開，調參數區保持清楚。</p></div>
+            <span>{learningMode === 'experiment' ? '實驗任務模式' : learningMode === 'coin' ? '金幣挑戰模式' : '尚未選擇'}</span>
           </div>
-          <div className="coin-lane-summary">
-            <span><i className="coin-dot lower" />下方 {COIN_LANES[0].count} 枚</span>
-            <span><i className="coin-dot upper" />上方 {COIN_LANES[1].count} 枚</span>
+          <div className="learning-mode-options" role="group" aria-label="選擇教學模式">
+            <button type="button" className={learningMode === 'none' ? 'selected' : ''} aria-pressed={learningMode === 'none'} onClick={() => { setLearningMode('none'); setFairTestMode(false); setExperimentWarning(null); }}><Gauge size={18} /><span><b>一般模擬</b><small>自由調整，直接觀察飛行</small></span></button>
+            <button type="button" className={learningMode === 'experiment' ? 'selected' : ''} aria-pressed={learningMode === 'experiment'} onClick={() => { setLearningMode('experiment'); setActiveStep('task'); }}><ClipboardList size={18} /><span><b>實驗任務</b><small>研究問題、基準、紀錄與報告</small></span></button>
+            <button type="button" className={learningMode === 'coin' ? 'selected' : ''} aria-pressed={learningMode === 'coin'} onClick={() => { setLearningMode('coin'); setFairTestMode(false); }}><Coins size={18} /><span><b>金幣挑戰</b><small>三次投擲，觀察角度與力道</small></span></button>
           </div>
-          <button className="coin-challenge-button" type="button" disabled={isAnimating} onClick={startCoinChallenge}>
-            {coinChallenge.active ? (coinChallenge.finished ? '再玩一次' : '重新開始挑戰') : '開始金幣挑戰'}
-          </button>
-          {(coinChallenge.active || coinChallenge.finished) && <p className="coin-challenge-status" role="status">
-            {coinChallenge.finished
-              ? `挑戰完成！你總共吃到 ${coinChallenge.score} / ${COIN_TARGETS.length} 枚金幣。已回到一般模擬，可以直接試飛。`
-              : coinChallenge.attempts === 0
-                ? '挑戰已開始，先觀察上下兩道弧線的位置。'
-                : `還剩 ${COIN_CHALLENGE_ATTEMPTS - coinChallenge.attempts} 次投擲。`}
-          </p>}
+          {learningMode === 'experiment' && <div className="learning-module-details">
+            <ExperimentTaskCard tasks={EXPERIMENT_TASKS} selected={selectedTask} onSelect={selectExperimentTask} locked={baselinePending} />
+            <section className={`setting-card baseline-card ${baselineResult ? 'complete' : ''}`}>
+              <div className="task-card-heading"><h2><Lock size={16} />公平測試與基準</h2><span className="task-level">先建立基準，再只改一項</span></div>
+              <p className="baseline-copy">你選擇的任務要改變「{activeTask.variableLabel}」。先建立基準並完成基準試飛；配重任務可在數量與位置中擇一，第一個修改後另一個會鎖定。</p>
+              <div className="baseline-status"><span className={baselineSettings ? 'done' : ''}>{baselineSettings ? '1' : '1'}</span><b>保存條件</b><span className={baselineResult ? 'done' : ''}>2</span><b>完成基準試飛</b><span className={fairTestMode ? 'done' : ''}>3</span><b>單一變因比較</b></div>
+              <button type="button" className="baseline-button" onClick={establishBaseline} disabled={isAnimating}>{baselineSettings ? '重新建立基準' : '建立基準'}</button>
+              {fairTestMode && <p className="lock-note"><Lock size={13} />已鎖定控制變因：{activeTask.controls}</p>}
+            </section>
+          </div>}
+          {learningMode === 'coin' && <div className="learning-module-details">
+            <section className={`setting-card coin-challenge-card ${coinChallenge.active ? 'active' : ''}`}>
+              <h2><Coins size={16} />三次投擲金幣挑戰</h2>
+              <p className="coin-challenge-intro">場景中有上下兩道金幣拋物線；調整投擲角度與力道，三次內吃到越多越好。</p>
+              <div className="coin-scoreboard" aria-label="金幣挑戰進度">
+                <div><span>吃到金幣</span><strong>{coinChallenge.score}<small> / {COIN_TARGETS.length}</small></strong></div>
+                <div><span>投擲次數</span><strong>{coinChallenge.attempts}<small> / {COIN_CHALLENGE_ATTEMPTS}</small></strong></div>
+                <div><span>上次吃到</span><strong>{coinChallenge.lastFlightScore}<small> 枚</small></strong></div>
+              </div>
+              <div className="coin-lane-summary">
+                <span><i className="coin-dot lower" />下方 {COIN_LANES[0].count} 枚</span>
+                <span><i className="coin-dot upper" />上方 {COIN_LANES[1].count} 枚</span>
+              </div>
+              <button className="coin-challenge-button" type="button" disabled={isAnimating} onClick={startCoinChallenge}>
+                {coinChallenge.active ? (coinChallenge.finished ? '再玩一次' : '重新開始挑戰') : '開始金幣挑戰'}
+              </button>
+              {(coinChallenge.active || coinChallenge.finished) && <p className="coin-challenge-status" role="status">
+                {coinChallenge.finished
+                  ? `挑戰完成！你總共吃到 ${coinChallenge.score} / ${COIN_TARGETS.length} 枚金幣。已回到一般模擬，可以直接試飛。`
+                  : coinChallenge.attempts === 0
+                    ? '挑戰已開始，先觀察上下兩道弧線的位置。'
+                    : `還剩 ${COIN_CHALLENGE_ATTEMPTS - coinChallenge.attempts} 次投擲。`}
+              </p>}
+            </section>
+          </div>}
         </section>
 
-        <section className="setting-card target-card">
+        {!isExperimentMode && <section className="setting-card target-card">
           <h2><Crosshair size={16} />這次想做什麼實驗？</h2>
           <div className="goal-options" role="group" aria-label="實驗目標">
             {EXPERIMENT_GOALS.map(goal => <button key={goal.value} className={settings.goal === goal.value ? 'selected' : ''} aria-pressed={settings.goal === goal.value} onClick={() => update('goal', goal.value)}>{goal.label}</button>)}
           </div>
-        </section>
+        </section>}
 
-        <section id="plane-step" className={`setting-card plane-card ${settings.goal === 'balance' ? 'recommended' : ''}`}>
+        <section id="plane-step" aria-disabled={isSectionLocked('plane')} className={`setting-card plane-card ${settings.goal === 'balance' ? 'recommended' : ''} ${isSectionLocked('plane') ? 'parameter-locked' : ''} ${isSectionFocused('plane') ? 'parameter-focused' : ''}`}>
           <h2><Plane size={16} />紙飛機</h2>
+          <VariableRoleStrip task={isExperimentMode ? displayTask : null} section="plane" />
           <div className="paper-tone-options" role="group" aria-label="紙張外觀">
-            {PAPER_TYPES.map(type => <button key={type.value} className={paperTone === type.value ? 'selected' : ''} aria-label={`${type.label}，紙飛機重量約 ${type.mass}。${type.description}`} aria-pressed={paperTone === type.value} onClick={() => setPaperTone(type.value)}><i className={`paper-swatch ${type.value}`} /><span><strong>{type.label}</strong><small>{type.mass}</small></span></button>)}
+            {PAPER_TYPES.map(type => <button key={type.value} disabled={isVariableLocked('paperTone')} className={paperTone === type.value ? 'selected' : ''} aria-label={`${type.label}，紙飛機重量約 ${type.mass}。${type.description}`} aria-pressed={paperTone === type.value} onClick={() => updatePaperTone(type.value)}><i className={`paper-swatch ${type.value}`} /><span><strong>{type.label}</strong><small>{type.mass}</small></span></button>)}
           </div>
           <p className="paper-performance"><strong>估重為紙機身，不含迴紋針。</strong><br />{PAPER_TYPES.find(type => type.value === paperTone)?.description}</p>
           <div className="placement-options" aria-label="迴紋針放置區域">
-            <button className={settings.clipPlacement === 'body' ? 'selected' : ''} onClick={() => update('clipPlacement', 'body')}>機身</button>
-            <button className={settings.clipPlacement === 'left' ? 'selected' : ''} onClick={() => update('clipPlacement', 'left')}>左翼</button>
-            <button className={settings.clipPlacement === 'right' ? 'selected' : ''} onClick={() => update('clipPlacement', 'right')}>右翼</button>
-            <button className={settings.clipPlacement === 'both' ? 'selected' : ''} onClick={() => update('clipPlacement', 'both')}>左右對稱</button>
+            <button disabled={isVariableLocked('clipPlacement')} className={settings.clipPlacement === 'body' ? 'selected' : ''} onClick={() => update('clipPlacement', 'body')}>機身</button>
+            <button disabled={isVariableLocked('clipPlacement')} className={settings.clipPlacement === 'left' ? 'selected' : ''} onClick={() => update('clipPlacement', 'left')}>左翼</button>
+            <button disabled={isVariableLocked('clipPlacement')} className={settings.clipPlacement === 'right' ? 'selected' : ''} onClick={() => update('clipPlacement', 'right')}>右翼</button>
+            <button disabled={isVariableLocked('clipPlacement')} className={settings.clipPlacement === 'both' ? 'selected' : ''} onClick={() => update('clipPlacement', 'both')}>左右對稱</button>
           </div>
-          <div className="stepper-row"><span>{settings.clipPlacement === 'both' ? '每側數量' : '數量'}</span><div className="stepper"><button onClick={() => update('clipCount', clamp(settings.clipCount - 1, 0, 3))}>−</button><strong>{settings.clipCount}</strong><button onClick={() => update('clipCount', clamp(settings.clipCount + 1, 0, 3))}>＋</button></div></div>
+          <div className="stepper-row"><span>{settings.clipPlacement === 'both' ? '每側數量' : '數量'}</span><div className="stepper"><button disabled={isVariableLocked('clipCount')} onClick={() => update('clipCount', clamp(settings.clipCount - 1, 0, 3))}>−</button><strong>{settings.clipCount}</strong><button disabled={isVariableLocked('clipCount')} onClick={() => update('clipCount', clamp(settings.clipCount + 1, 0, 3))}>＋</button></div></div>
           <div className="position-label">拖曳紙飛機上的標記調整配重位置</div>
           <div className="plane-map"><span className="nose">機頭</span><div
-            className="mini-plane"
+            className={`mini-plane ${isVariableLocked('clipPosition') ? 'parameter-control-locked' : ''}`}
             role="slider"
             tabIndex={0}
             aria-label="拖曳迴紋針位置"
             aria-valuemin={5}
             aria-valuemax={75}
             aria-valuenow={settings.clipPosition}
-            onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setClipFromPointer(e.clientX, e.currentTarget); }}
-            onPointerMove={e => { if (e.currentTarget.hasPointerCapture(e.pointerId)) setClipFromPointer(e.clientX, e.currentTarget); }}
+            aria-disabled={isVariableLocked('clipPosition')}
+            onClick={() => isVariableLocked('clipPosition') && setExperimentWarning('目前只能調整「配重位置」。')}
+            onPointerDown={e => { if (isVariableLocked('clipPosition')) return; e.currentTarget.setPointerCapture(e.pointerId); setClipFromPointer(e.clientX, e.currentTarget); }}
+            onPointerMove={e => { if (!isVariableLocked('clipPosition') && e.currentTarget.hasPointerCapture(e.pointerId)) setClipFromPointer(e.clientX, e.currentTarget); }}
             onPointerUp={e => e.currentTarget.releasePointerCapture(e.pointerId)}
             onKeyDown={e => {
               if (e.key === 'ArrowLeft') update('clipPosition', clamp(settings.clipPosition - 1, 5, 75));
@@ -1761,6 +2078,7 @@ function App() {
                 type="button"
                 className={settings.wingArea === option.value ? 'selected' : ''}
                 aria-pressed={settings.wingArea === option.value}
+                disabled={isVariableLocked('wingArea')}
                 onClick={() => update('wingArea', option.value)}
               >
                 <strong>{option.label}</strong><span>{option.area}</span>
@@ -1770,58 +2088,67 @@ function App() {
           <p className="wing-area-note">翼面積增加會同時增加升力與阻力；這是簡化的飛行模型。</p>
         </section>
 
-        <section id="throw-step" className={`setting-card throw-card ${['far', 'high', 'airtime'].includes(settings.goal) ? 'recommended' : ''}`}>
+        <section id="throw-step" aria-disabled={isSectionLocked('throw')} className={`setting-card throw-card ${['far', 'high', 'airtime'].includes(settings.goal) ? 'recommended' : ''} ${isSectionLocked('throw') ? 'parameter-locked' : ''} ${isSectionFocused('throw') ? 'parameter-focused' : ''}`}>
           <h2><ArrowUpRight size={16} />投擲</h2>
-          <Slider label="投擲角度" value={settings.throwAngle} min={0} max={90} unit="°" tone="coral" hint="角度提高有助上升，過大可能失速。" onChange={v => update('throwAngle', v)} />
-          <Slider label="投擲力道" value={settings.throwPower} min={20} max={100} unit="%" tone="coral" hint="力道提高會增加初速，通常也能增加距離。" onChange={v => update('throwPower', v)} />
-          <Slider label="初始高度" value={settings.initialHeight} min={0.5} max={5} step={0.1} unit=" m" onChange={v => update('initialHeight', v)} />
+          <VariableRoleStrip task={isExperimentMode ? displayTask : null} section="throw" />
+          <Slider disabled={isVariableLocked('throwAngle')} label="投擲角度" value={settings.throwAngle} min={0} max={90} unit="°" tone="coral" hint="角度提高有助上升，過大可能失速。" onChange={v => update('throwAngle', v)} />
+          <Slider disabled={isVariableLocked('throwPower')} label="投擲力道" value={settings.throwPower} min={20} max={100} unit="%" tone="coral" hint="力道提高會增加初速，通常也能增加距離。" onChange={v => update('throwPower', v)} />
+          <Slider disabled={isVariableLocked('initialHeight')} label="初始高度" value={settings.initialHeight} min={0.5} max={5} step={0.1} unit=" m" onChange={v => update('initialHeight', v)} />
         </section>
 
-        <section id="wind-step" className={`setting-card wind-card ${settings.goal === 'wind' ? 'recommended' : ''}`}>
+        <section id="wind-step" aria-disabled={isSectionLocked('wind')} className={`setting-card wind-card ${settings.goal === 'wind' ? 'recommended' : ''} ${isSectionLocked('wind') ? 'parameter-locked' : ''} ${isSectionFocused('wind') ? 'parameter-focused' : ''}`}>
           <h2><Wind size={16} />風場</h2>
+          <VariableRoleStrip task={isExperimentMode ? displayTask : null} section="wind" />
           <div className="wind-direction">
             <span>風向</span>
             <div className="wind-wheel" role="group" aria-label="風向">
-              <button className={settings.windDirection === 'front' ? 'selected' : ''} aria-label="正面風" aria-pressed={settings.windDirection === 'front'} onClick={() => setWindDirection('front')}>↑</button>
-              <button className={settings.windDirection === 'left' ? 'selected' : ''} aria-label="左側風" aria-pressed={settings.windDirection === 'left'} onClick={() => setWindDirection('left')}>←</button>
+              <button disabled={isVariableLocked('windDirection')} className={settings.windDirection === 'front' ? 'selected' : ''} aria-label="正面風" aria-pressed={settings.windDirection === 'front'} onClick={() => setWindDirection('front')}>↑</button>
+              <button disabled={isVariableLocked('windDirection')} className={settings.windDirection === 'left' ? 'selected' : ''} aria-label="左側風" aria-pressed={settings.windDirection === 'left'} onClick={() => setWindDirection('left')}>←</button>
               <span aria-hidden="true"><Wind size={16} /></span>
-              <button className={settings.windDirection === 'right' ? 'selected' : ''} aria-label="右側風" aria-pressed={settings.windDirection === 'right'} onClick={() => setWindDirection('right')}>→</button>
+              <button disabled={isVariableLocked('windDirection')} className={settings.windDirection === 'right' ? 'selected' : ''} aria-label="右側風" aria-pressed={settings.windDirection === 'right'} onClick={() => setWindDirection('right')}>→</button>
             </div>
           </div>
-          <Slider label="平均風速" value={settings.wind} min={settings.windDirection === 'front' ? -10 : 0} max={10} unit=" m/s" tone="sky" hint="風越強，飛機受力和落點側偏越明顯。" onChange={v => update('wind', v)} />
+          <Slider disabled={isVariableLocked('wind')} label="平均風速" value={settings.wind} min={settings.windDirection === 'front' ? -10 : 0} max={10} unit=" m/s" tone="sky" hint="風越強，飛機受力和落點側偏越明顯。" onChange={v => update('wind', v)} />
           <div className="scenario-presets" aria-label="快速實驗情境">
-            <button className={activeScenario === 'baseline' ? 'selected' : ''} aria-pressed={activeScenario === 'baseline'} onClick={() => applyScenario('baseline')}><i>＝</i>平穩基準</button>
-            <button className={activeScenario === 'leftWind' ? 'selected' : ''} aria-pressed={activeScenario === 'leftWind'} onClick={() => applyScenario('leftWind')}><i>←</i>左側風</button>
-            <button className={activeScenario === 'rightWind' ? 'selected' : ''} aria-pressed={activeScenario === 'rightWind'} onClick={() => applyScenario('rightWind')}><i>→</i>右側風</button>
-            <button className={activeScenario === 'gust' ? 'selected' : ''} aria-pressed={activeScenario === 'gust'} onClick={() => applyScenario('gust')}><i>≋</i>強陣風</button>
-            <button className={activeScenario === 'typhoon' ? 'selected' : ''} aria-pressed={activeScenario === 'typhoon'} onClick={() => applyScenario('typhoon')}><i>◌</i>颱風亂流</button>
-            <button className={activeScenario === 'noseHeavy' ? 'selected' : ''} aria-pressed={activeScenario === 'noseHeavy'} onClick={() => applyScenario('noseHeavy')}><i>↓</i>機頭過重</button>
-            <button className={activeScenario === 'leftHeavy' ? 'selected' : ''} aria-pressed={activeScenario === 'leftHeavy'} onClick={() => applyScenario('leftHeavy')}><i>↙</i>左翼過重</button>
+            <button disabled={isExperimentMode && baselineResult} className={activeScenario === 'baseline' ? 'selected' : ''} aria-pressed={activeScenario === 'baseline'} onClick={() => applyScenario('baseline')}><i>＝</i>平穩基準</button>
+            <button disabled={isExperimentMode && baselineResult} className={activeScenario === 'leftWind' ? 'selected' : ''} aria-pressed={activeScenario === 'leftWind'} onClick={() => applyScenario('leftWind')}><i>←</i>左側風</button>
+            <button disabled={isExperimentMode && baselineResult} className={activeScenario === 'rightWind' ? 'selected' : ''} aria-pressed={activeScenario === 'rightWind'} onClick={() => applyScenario('rightWind')}><i>→</i>右側風</button>
+            <button disabled={isExperimentMode && baselineResult} className={activeScenario === 'gust' ? 'selected' : ''} aria-pressed={activeScenario === 'gust'} onClick={() => applyScenario('gust')}><i>≋</i>強陣風</button>
+            <button disabled={isExperimentMode && baselineResult} className={activeScenario === 'typhoon' ? 'selected' : ''} aria-pressed={activeScenario === 'typhoon'} onClick={() => applyScenario('typhoon')}><i>◌</i>颱風亂流</button>
+            <button disabled={isExperimentMode && baselineResult} className={activeScenario === 'noseHeavy' ? 'selected' : ''} aria-pressed={activeScenario === 'noseHeavy'} onClick={() => applyScenario('noseHeavy')}><i>↓</i>機頭過重</button>
+            <button disabled={isExperimentMode && baselineResult} className={activeScenario === 'leftHeavy' ? 'selected' : ''} aria-pressed={activeScenario === 'leftHeavy'} onClick={() => applyScenario('leftHeavy')}><i>↙</i>左翼過重</button>
           </div>
+          {activeScenario && SCENARIO_EXPLANATIONS[activeScenario] && <div className="scenario-explanation"><b>{SCENARIO_EXPLANATIONS[activeScenario].focus}</b><span>{SCENARIO_EXPLANATIONS[activeScenario].reason}</span><span>{SCENARIO_EXPLANATIONS[activeScenario].try}</span></div>}
           <p className="wind-effect-note">{settings.wind === 0 ? '目前無風，可以先建立平穩的比較基準。' : `${settings.windDirection === 'left' ? '左側' : settings.windDirection === 'right' ? '右側' : settings.wind < 0 ? '逆' : '順'}風會改變飛機受力與落點，試飛看看姿態變化。`}</p>
           <h3 className="card-subheading">天氣</h3>
           <div className="weather-options" aria-label="天氣預設">
-            <button className={settings.weather === 'clear' ? 'selected' : ''} onClick={() => setWeatherMode('clear')}><Sun size={15} />晴天</button>
-            <button className={settings.weather === 'rain' ? 'selected' : ''} onClick={() => setWeatherMode('rain')}><CloudRain size={15} />下雨</button>
-            <button className={settings.weather === 'typhoon' ? 'selected' : ''} onClick={() => setWeatherMode('typhoon')}><Wind size={15} />颱風</button>
+            <button disabled={isVariableLocked('weather')} className={settings.weather === 'clear' ? 'selected' : ''} onClick={() => setWeatherMode('clear')}><Sun size={15} />晴天</button>
+            <button disabled={isVariableLocked('weather')} className={settings.weather === 'rain' ? 'selected' : ''} onClick={() => setWeatherMode('rain')}><CloudRain size={15} />下雨</button>
+            <button disabled={isVariableLocked('weather')} className={settings.weather === 'typhoon' ? 'selected' : ''} onClick={() => setWeatherMode('typhoon')}><Wind size={15} />颱風</button>
           </div>
           {settings.weather === 'typhoon' && <p className="typhoon-warning">颱風模式：強風 10 m/s、斜向暴雨、陣風亂流與不規則側翻。</p>}
         </section>
 
-        <details className="advanced-settings setting-card" open={advancedOpen} onToggle={event => setAdvancedOpen(event.currentTarget.open)}>
+        <details aria-disabled={isSectionLocked('wind')} className={`advanced-settings setting-card ${isSectionLocked('wind') ? 'parameter-locked' : ''}`} open={advancedOpen} onToggle={event => setAdvancedOpen(event.currentTarget.open)}>
           <summary>進階設定</summary>
           <p>想觀察更細的變因時再展開調整。</p>
-          <Slider label="陣風強度" value={settings.gustStrength} min={0} max={1} step={0.05} unit="×" onChange={v => update('gustStrength', v)} />
-          <Slider label="亂流程度" value={settings.turbulence} min={0} max={1} step={0.05} unit="×" onChange={v => update('turbulence', v)} />
-          <Slider label="陣風出現時間" value={settings.gustDelay} min={0} max={5} step={0.25} unit=" s" onChange={v => update('gustDelay', v)} />
-          <Slider label="機翼柔軟度" value={settings.wingSoftness} min={0} max={1} step={0.05} unit="×" onChange={v => update('wingSoftness', v)} />
+          <Slider disabled={isVariableLocked('gustStrength')} label="陣風強度" value={settings.gustStrength} min={0} max={1} step={0.05} unit="×" onChange={v => update('gustStrength', v)} />
+          <Slider disabled={isVariableLocked('turbulence')} label="亂流程度" value={settings.turbulence} min={0} max={1} step={0.05} unit="×" onChange={v => update('turbulence', v)} />
+          <Slider disabled={isVariableLocked('gustDelay')} label="陣風出現時間" value={settings.gustDelay} min={0} max={5} step={0.25} unit=" s" onChange={v => update('gustDelay', v)} />
+          <Slider disabled={isVariableLocked('wingSoftness')} label="機翼柔軟度" value={settings.wingSoftness} min={0} max={1} step={0.05} unit="×" onChange={v => update('wingSoftness', v)} />
           <p className="wind-note">機翼柔軟度目前只改變紙翼彎曲外觀，不會改變氣動力計算。</p>
         </details>
+
+        {isExperimentMode && <>
+          <ExperimentRecordTable records={experimentRecords} baselineResult={baselineResult} />
+          <GuidedQuestions task={displayTask} result={result} comparison={comparison} answers={guidedAnswers} onAnswer={(key, value) => setGuidedAnswers(current => ({ ...current, [key]: value }))} showAnalysis={showSystemAnalysis} onToggleAnalysis={() => setShowSystemAnalysis(value => !value)} />
+          <ExperimentReport task={displayTask} baselineResult={baselineResult} result={result} predictionSummary={predictionSummary} answers={guidedAnswers} reportFields={reportFields} onReportFieldChange={(key, value) => setReportFields(current => ({ ...current, [key]: value }))} />
+        </>}
 
       </aside>
 
       <div className="flight-actions" id="flight-step">
-        {result && !coinChallenge.active && <section className="prediction-section">
+        {isExperimentMode && result && !coinChallenge.active && <section className="prediction-section">
           <h2><Brain size={15} />先預測，再試飛</h2>
           {predictionSummary && <div className={`prediction-result ${predictionSummary.correct ? 'correct' : 'review'}`}>
             <div><small>你的預測</small><strong>{predictionSummary.expected}</strong></div>
@@ -1838,7 +2165,7 @@ function App() {
           </div>
           {predictionFeedback && <p className="prediction-feedback"><CheckCircle2 size={15} />{predictionFeedback}</p>}
         </section>}
-        <button className="launch" disabled={isAnimating || (coinChallenge.active ? coinChallenge.finished : Boolean(result && !prediction))} onClick={launch}><Plane size={20} />{isAnimating ? '飛行中…' : coinChallenge.active ? (coinChallenge.finished ? '挑戰已完成' : `第 ${coinChallenge.attempts + 1} 次投擲`) : result && !prediction ? '請先選擇預測' : result ? '再次試飛' : '開始試飛'}</button>
+        <button className="launch" disabled={isAnimating || (coinChallenge.active ? coinChallenge.finished : Boolean((isExperimentMode && !baselineSettings) || (isExperimentMode && result && !prediction && !baselinePending)))} onClick={launch}><Plane size={20} />{isAnimating ? '飛行中…' : coinChallenge.active ? (coinChallenge.finished ? '挑戰已完成' : `第 ${coinChallenge.attempts + 1} 次投擲`) : isExperimentMode && !baselineSettings ? '請先建立基準' : isExperimentMode && baselinePending ? '基準試飛' : isExperimentMode && result && !prediction ? '請先選擇預測' : result ? '再次試飛' : '開始試飛'}</button>
         {result && !coinChallenge.active && <button className="replay" disabled={isAnimating} onClick={replay}><Rewind size={18} />慢動作重播</button>}
         {result && !coinChallenge.active && <div className="replay-tools">
           <div className="replay-speeds" role="group" aria-label="重播速度">{[0.5, 1, 2].map(speed => <button key={speed} className={replaySpeed === speed ? 'selected' : ''} onClick={() => setReplaySpeed(speed)}>{speed}×</button>)}</div>
